@@ -1,0 +1,137 @@
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.date-range-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.report-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.report-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+.report-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius);
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.report-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+  flex: 1;
+}
+
+.chart-placeholder {
+  padding: 1.5rem 0;
+  min-height: 200px;
+}
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 0.5rem;
+  height: 180px;
+  padding: 0 1rem;
+}
+
+.bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 60px;
+}
+
+.bar {
+  width: 100%;
+  min-height: 4px;
+  background: var(--primary);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s;
+}
+
+.bar-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.chart-legend {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .report-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .date-range-select {
+    justify-content: space-between;
+  }
+
+  .date-range-select .select-input {
+    flex: 1;
+    min-width: 0;
+    margin-left: 0.5rem;
+  }
+
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bar-chart {
+    height: 160px;
+    padding: 0 0.5rem;
+  }
+
+  .bar-group {
+    max-width: 40px;
+  }
+
+  .bar-label {
+    font-size: 0.625rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-placeholder {
+    padding: 1rem 0;
+  }
+
+  .bar-chart {
+    height: 140px;
+  }
+}

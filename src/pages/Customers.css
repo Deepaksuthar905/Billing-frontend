@@ -1,0 +1,247 @@
+.customers-page .filters-row {
+  margin-bottom: 1rem;
+}
+
+.customers-page .search-box {
+  max-width: 320px;
+  position: relative;
+}
+
+.customers-page .search-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.customers-page .search-box .search-input {
+  width: 100%;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.customer-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.customer-name .text-muted {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.contact-cell span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.text-warning {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.customers-page .btn-icon {
+  background: none;
+  border: none;
+  color: var(--primary);
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.customers-page .btn-icon:hover {
+  text-decoration: underline;
+}
+
+/* Add Customer Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.modal-box {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.customer-form {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-heading);
+  margin-bottom: 0.35rem;
+}
+
+.form-group .required {
+  color: var(--danger);
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.form-row-check {
+  margin-bottom: 0.75rem;
+}
+
+.form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.form-check input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Customer detail view modal */
+.modal-box--detail .customer-detail {
+  padding: 1.5rem;
+}
+
+.detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-row:last-of-type {
+  border-bottom: none;
+}
+
+.detail-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.detail-value {
+  font-size: 0.9375rem;
+  color: var(--text-heading);
+}
+
+.detail-value.text-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.detail-actions {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .customers-page .search-box {
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .table-wrap {
+    margin: 0 -1rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 480px;
+  }
+
+  .customer-name .text-muted {
+    word-break: break-all;
+  }
+}

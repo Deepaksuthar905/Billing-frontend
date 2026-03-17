@@ -1,0 +1,211 @@
+.purchase-page .tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.purchase-page .filters-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.purchase-page .search-box {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+}
+
+.purchase-page .search-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.purchase-page .search-box .search-input {
+  width: 100%;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.purchase-page .btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.25rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.purchase-page .btn-icon:hover {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+@media (max-width: 768px) {
+  .purchase-page .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+
+  .tab {
+    white-space: nowrap;
+    padding: 0.6rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .purchase-page .filters-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .purchase-page .search-box {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .table-wrap {
+    margin: 0 -1rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 480px;
+  }
+}
+
+/* Add Purchase modal */
+.purchase-page .modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.purchase-page .modal-box {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.purchase-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.purchase-page .modal-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.purchase-page .modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.purchase-page .modal-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.purchase-page .purchase-form {
+  padding: 1.5rem;
+}
+
+.purchase-page .purchase-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.purchase-page .purchase-form label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-heading);
+  margin-bottom: 0.35rem;
+}
+
+.purchase-page .purchase-form .required {
+  color: var(--danger);
+}
+
+.purchase-page .purchase-form .form-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.purchase-page .purchase-form .form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.purchase-page .form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.purchase-page .form-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
