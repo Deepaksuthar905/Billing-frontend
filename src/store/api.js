@@ -89,7 +89,6 @@ export const billingApi = createApi({
       query: (body) => ({ url: '/invoices', method: 'POST', body }),
       invalidatesTags: ['Invoice', 'Dashboard', 'Sale'],
     }),
-
     // Sales
     getSales: builder.query({
       query: (search) => ({

@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Eye, Edit } from 'lucide-react'
+import { Plus, Search, Filter, Eye, Edit, RefreshCw } from 'lucide-react'
 import { useGetInvoicesQuery } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Invoices.css'
+
+const SYNC_INVOICES_URL = 'http://127.0.0.1:8000/api/sync-invoices'
 
 export default function Invoices() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [isSyncing, setIsSyncing] = useState(false)
 
-  const { data, isLoading, isError } = useGetInvoicesQuery(
+  const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
     { search: search || undefined, status: status || undefined },
     { refetchOnMountOrArgChange: 120 }
   )
@@ -25,11 +28,54 @@ export default function Invoices() {
     statusClass: (inv.status || '').toLowerCase() === 'paid' ? 'paid' : (inv.status || '').toLowerCase() === 'pending' ? 'pending' : 'overdue',
   }))
 
+  const handleSync = async () => {
+    const from = dateFrom || new Date().toISOString().slice(0, 10)
+    const to = dateTo || new Date().toISOString().slice(0, 10)
+    const url = `${SYNC_INVOICES_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    setIsSyncing(true)
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!res.ok) throw new Error(`Sync failed: ${res.status}`)
+      refetch()
+    } catch (err) {
+      console.error('Sync error:', err)
+      alert(err?.message || 'Sync failed. Check console.')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   return (
     <div className="invoices-page">
       <div className="page-header">
         <h1 className="page-title">Invoices</h1>
         <div className="page-header-actions">
+          <div className="filter-group">
+            <label className="sync-date-range">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="input-sm"
+              />
+              <span className="sync-date-sep">to</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="input-sm"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            <RefreshCw size={18} className={isSyncing ? 'spin' : ''} />
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </button>
           <Link to="/invoices/new" className="btn btn-primary">
             <Plus size={18} />
             New Invoice
@@ -49,23 +95,7 @@ export default function Invoices() {
               className="search-input"
             />
           </div>
-          <div className="filter-group">
-            <label className="sync-date-range">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="input-sm"
-              />
-              <span className="sync-date-sep">to</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="input-sm"
-              />
-            </label>
-          </div>
+
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
