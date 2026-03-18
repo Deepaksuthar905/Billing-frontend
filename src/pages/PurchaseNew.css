@@ -1,0 +1,335 @@
+.purchase-new-page {
+  padding: 0 1rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.purchase-new-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  margin-bottom: 0.75rem;
+}
+
+.purchase-new-header-left,
+.purchase-new-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.purchase-new-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text, #1f2937);
+}
+
+.purchase-new-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+  margin: 0;
+}
+
+.purchase-new-header .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+}
+
+.purchase-new-header .icon-btn:hover {
+  background: var(--primary-light, #e0e7ff);
+  color: var(--primary, #4f46e5);
+}
+
+.purchase-form-card {
+  padding: 1.25rem;
+}
+
+.purchase-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.purchase-form-row .form-group--party {
+  grid-column: span 1;
+}
+
+.purchase-form-row .form-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+  margin-bottom: 0.35rem;
+}
+
+.purchase-form-row .required {
+  color: #dc2626;
+}
+
+.purchase-items-section {
+  margin-bottom: 1.5rem;
+}
+
+.purchase-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.purchase-items-table th,
+.purchase-items-table td {
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--border, #e5e7eb);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.purchase-items-table th {
+  background: var(--bg-secondary, #f9fafb);
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.purchase-items-table .input-sm {
+  width: 100%;
+  min-width: 50px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.purchase-items-table .price-type-select {
+  min-width: 100px;
+}
+
+.purchase-items-table th.th-price-unit {
+  vertical-align: top;
+}
+
+.purchase-items-table th.th-price-unit .th-main {
+  display: block;
+}
+
+.purchase-items-table th.th-price-unit .price-type-select {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.purchase-items-table td.td-price-unit .form-input {
+  width: 100%;
+}
+
+.purchase-items-table .amount-cell {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.purchase-items-table .totals-row {
+  font-weight: 600;
+  background: var(--bg-secondary, #f9fafb);
+}
+
+.purchase-items-table .totals-row td {
+  padding: 0.6rem 0.4rem;
+}
+
+.btn-remove-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-remove-row:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.btn-add-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  border: 1px dashed var(--border, #d1d5db);
+  background: transparent;
+  color: var(--primary, #4f46e5);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+}
+
+.btn-add-row:hover {
+  background: var(--primary-light, #e0e7ff);
+  border-color: var(--primary, #4f46e5);
+}
+
+.purchase-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.purchase-form-footer .footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.purchase-form-footer .footer-left .form-group {
+  max-width: 220px;
+}
+
+.purchase-form-footer .footer-left .form-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+  margin-bottom: 0.35rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary, #4f46e5);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.purchase-form-footer .btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border, #e5e7eb);
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.85rem;
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.purchase-form-footer .btn-outline:hover {
+  border-color: var(--primary, #4f46e5);
+  color: var(--primary, #4f46e5);
+}
+
+.purchase-form-footer .footer-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.purchase-form-footer .total-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.purchase-form-footer .total-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.purchase-form-footer .total-input {
+  width: 100px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 4px;
+  text-align: right;
+}
+
+.purchase-form-footer .total-final {
+  font-size: 1.1rem;
+  margin-top: 0.25rem;
+}
+
+.purchase-form-footer .total-final strong {
+  min-width: 100px;
+  text-align: right;
+}
+
+.purchase-form-footer .footer-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 1024px) {
+  .purchase-form-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .purchase-new-page {
+    padding: 0 0.5rem 1.5rem;
+  }
+
+  .purchase-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .purchase-form-footer .footer-right {
+    align-items: stretch;
+  }
+
+  .purchase-form-footer .footer-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 600px) {
+  .purchase-items-section {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+  }
+
+  .purchase-items-table {
+    min-width: 1000px;
+  }
+}

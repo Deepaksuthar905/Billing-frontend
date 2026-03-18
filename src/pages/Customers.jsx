@@ -24,9 +24,10 @@ export default function Customers() {
   const [viewCustomer, setViewCustomer] = useState(null)
   const [form, setForm] = useState(initialForm)
 
-  const { data, isLoading, isError } = useGetCustomersQuery(search || undefined, {
-    refetchOnMountOrArgChange: 120,
-  })
+  const { data, isLoading, isError } = useGetCustomersQuery(
+    { search: search || undefined, prtytyp: 0 },
+    { refetchOnMountOrArgChange: 120 }
+  )
   const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation()
 
   const list = (isError || !data?.data ? fallbackCustomers : data.data).map((c) => ({

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Purchase from './pages/Purchase'
+import PurchaseNew from './pages/PurchaseNew'
 import Inventory from './pages/Inventory'
 import Customers from './pages/Customers'
 import Reports from './pages/Reports'
@@ -15,6 +16,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="purchase" element={<Purchase />} />
+        <Route path="purchase/new" element={<PurchaseNew />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="customers" element={<Customers />} />
         <Route path="invoices" element={<Invoices />} />

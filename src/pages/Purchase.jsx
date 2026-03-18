@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Plus, Search, Filter, Package, Users, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, Search, Filter, Package, Users } from 'lucide-react'
 import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Purchase.css'
@@ -17,66 +18,18 @@ const fallbackVendors = [
   { id: 'v3', name: 'Supplier C', contact: '9876543212', balance: 0, lastOrder: '2025-03-13' },
 ]
 
-const initialForm = {
-  p_inv_no: '',
-  dt: new Date().toISOString().slice(0, 10),
-  state: '',
-  payment: '',
-  prhid: '',
-  gst: '',
-  cgst: '',
-  sgst: '',
-  igst: '',
-  payby: 1,
-  refno: '',
-}
-
 export default function Purchase() {
   const [activeTab, setActiveTab] = useState('orders')
   const [search, setSearch] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState(initialForm)
 
   const { data: poData, isLoading: poLoading, isError: poError } = useGetPurchaseOrdersQuery(
     search || undefined,
     { refetchOnMountOrArgChange: 120 }
   )
   const { data: customersData, isLoading: customersLoading, isError: customersError } = useGetCustomersQuery(
-    search || undefined,
+    { search: search || undefined, prtytyp: 1 },
     { refetchOnMountOrArgChange: 120 }
   )
-  const [createPurchaseOrder, { isLoading: isCreating }] = useCreatePurchaseOrderMutation()
-
-  const handleFormChange = (e) => {
-    const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSubmitPurchase = async (e) => {
-    e.preventDefault()
-    const payload = {
-      p_inv_no: form.p_inv_no.trim(),
-      dt: form.dt,
-      state: form.state.trim(),
-      payment: Number(form.payment) || 0,
-      prhid: Number(form.prhid) || 0,
-      gst: Number(form.gst) || 0,
-      cgst: Number(form.cgst) || 0,
-      sgst: Number(form.sgst) || 0,
-      igst: Number(form.igst) || 0,
-      payby: Number(form.payby) || 1,
-      refno: form.refno.trim() || undefined,
-    }
-    try {
-      await createPurchaseOrder(payload).unwrap()
-      setForm(initialForm)
-      setModalOpen(false)
-    } catch (err) {
-      console.error('Create purchase failed:', err)
-      alert(err?.data?.message || err?.data?.detail || 'Could not add purchase. Please try again.')
-    }
-  }
-
   const purchaseOrders = (poError || !poData?.data ? fallbackPOs : poData.data).map((po) => {
     const amountOrTotal = po.amount ?? po.total
     return {
@@ -102,10 +55,10 @@ export default function Purchase() {
     <div className="purchase-page">
       <div className="page-header">
         <h1 className="page-title">Purchase</h1>
-        <button type="button" className="btn btn-primary" onClick={() => setModalOpen(true)}>
+        <Link to="/purchase/new" className="btn btn-primary">
           <Plus size={18} />
           New Purchase Order
-        </button>
+        </Link>
       </div>
 
       <div className="tabs">
@@ -227,75 +180,6 @@ export default function Purchase() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {modalOpen && (
-        <div className="modal-overlay" onClick={() => setModalOpen(false)} role="presentation">
-          <div className="modal-box modal-box--purchase" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Add Purchase</h2>
-              <button type="button" className="modal-close" onClick={() => setModalOpen(false)} aria-label="Close">
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmitPurchase} className="purchase-form">
-              <div className="form-group">
-                <label htmlFor="p_inv_no">Purchase Invoice No <span className="required">*</span></label>
-                <input id="p_inv_no" type="text" name="p_inv_no" value={form.p_inv_no} onChange={handleFormChange} placeholder="PINV-001" required className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="dt">Date <span className="required">*</span></label>
-                <input id="dt" type="date" name="dt" value={form.dt} onChange={handleFormChange} required className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="state">State</label>
-                <input id="state" type="text" name="state" value={form.state} onChange={handleFormChange} placeholder="e.g. Maharashtra" className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="prhid">Party (prhid) <span className="required">*</span></label>
-                <input id="prhid" type="number" name="prhid" value={form.prhid} onChange={handleFormChange} placeholder="1" min="1" required className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="payment">Payment (₹)</label>
-                <input id="payment" type="number" name="payment" value={form.payment} onChange={handleFormChange} placeholder="100" min="0" step="0.01" className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="gst">GST %</label>
-                <input id="gst" type="number" name="gst" value={form.gst} onChange={handleFormChange} placeholder="18" min="0" max="100" step="0.01" className="form-input" />
-              </div>
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label htmlFor="cgst">CGST %</label>
-                  <input id="cgst" type="number" name="cgst" value={form.cgst} onChange={handleFormChange} placeholder="9" min="0" step="0.01" className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="sgst">SGST %</label>
-                  <input id="sgst" type="number" name="sgst" value={form.sgst} onChange={handleFormChange} placeholder="9" min="0" step="0.01" className="form-input" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label htmlFor="igst">IGST %</label>
-                <input id="igst" type="number" name="igst" value={form.igst} onChange={handleFormChange} placeholder="0" min="0" step="0.01" className="form-input" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="payby">Pay By</label>
-                <select id="payby" name="payby" value={form.payby} onChange={handleFormChange} className="form-input">
-                  <option value={1}>1 - Cash/Other</option>
-                  <option value={2}>2 - Card</option>
-                  <option value={3}>3 - UPI</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="refno">Reference No</label>
-                <input id="refno" type="text" name="refno" value={form.refno} onChange={handleFormChange} placeholder="REF-001" className="form-input" />
-              </div>
-              <div className="form-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={isCreating}>{isCreating ? 'Saving...' : 'Add Purchase'}</button>
-              </div>
-            </form>
           </div>
         </div>
       )}

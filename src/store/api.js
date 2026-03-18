@@ -117,9 +117,14 @@ export const billingApi = createApi({
 
     // Customers
     getCustomers: builder.query({
-      query: (search) => ({
-        url: search ? `/customers?search=${encodeURIComponent(search)}` : '/customers',
-      }),
+      query: (arg) => {
+        const params = new URLSearchParams()
+        const search = typeof arg === 'string' ? arg : arg?.search
+        const prtytyp = typeof arg === 'object' && arg?.prtytyp !== undefined ? arg.prtytyp : undefined
+        if (search) params.set('search', search)
+        if (prtytyp !== undefined) params.set('prtytyp', prtytyp)
+        return { url: params.toString() ? `/customers?${params}` : '/customers' }
+      },
       transformResponse: normalizeList,
       providesTags: (result) =>
         result?.data
