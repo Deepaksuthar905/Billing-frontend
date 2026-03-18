@@ -1,6 +1,5 @@
 import {
   TrendingUp,
-  ShoppingCart,
   Package,
   DollarSign,
   ArrowUpRight,
@@ -13,14 +12,14 @@ import { formatCurrency, formatDate } from '../utils/format'
 import './Dashboard.css'
 
 const statsConfig = [
-  { key: 'totalSales', title: 'Total Sales', trendKey: 'salesChangePercent', icon: TrendingUp, color: 'primary', link: '/sales' },
+  { key: 'totalSales', title: 'Total Sales', trendKey: 'salesChangePercent', icon: TrendingUp, color: 'primary', link: '/invoices' },
   { key: 'totalPurchase', title: 'Purchase', trendKey: 'purchaseChangePercent', icon: Package, color: 'warning', link: '/purchase' },
   { key: 'outstanding', title: 'Outstanding', trendKey: 'outstandingChangePercent', icon: DollarSign, color: 'danger', link: '/invoices' },
   { key: 'invoiceCount', title: 'Invoices This Month', trendKey: null, icon: FileText, color: 'success', link: '/invoices' },
 ]
 
 const fallbackStats = [
-  { title: 'Total Sales', value: '₹2,45,680', change: '+12.5%', trend: 'up', icon: TrendingUp, color: 'primary', link: '/sales' },
+  { title: 'Total Sales', value: '₹2,45,680', change: '+12.5%', trend: 'up', icon: TrendingUp, color: 'primary', link: '/invoices' },
   { title: 'Purchase', value: '₹1,82,400', change: '+8.2%', trend: 'up', icon: Package, color: 'warning', link: '/purchase' },
   { title: 'Outstanding', value: '₹45,200', change: '-3.1%', trend: 'down', icon: DollarSign, color: 'danger', link: '/invoices' },
   { title: 'Invoices This Month', value: '48', change: '+15', trend: 'up', icon: FileText, color: 'success', link: '/invoices' },
@@ -93,9 +92,9 @@ export default function Dashboard() {
       <div className="page-header">
         <h1 className="page-title">Dashboard</h1>
         <div className="dashboard-actions">
-          <Link to="/sales" className="btn btn-primary">
-            <ShoppingCart size={18} />
-            New Sale
+          <Link to="/invoices/new" className="btn btn-primary">
+            <FileText size={18} />
+            New Invoice
           </Link>
           <Link to="/invoices" className="btn btn-secondary">
             <FileText size={18} />

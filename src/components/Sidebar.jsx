@@ -2,7 +2,6 @@ import { NavLink } from 'react-router-dom'
 import { X } from 'lucide-react'
 import {
   LayoutDashboard,
-  ShoppingCart,
   Package,
   Boxes,
   Users,
@@ -13,7 +12,6 @@ import './Sidebar.css'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/sales', icon: ShoppingCart, label: 'Sales' },
   { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/purchase', icon: Package, label: 'Purchase' },
   { to: '/inventory', icon: Boxes, label: 'Inventory' },

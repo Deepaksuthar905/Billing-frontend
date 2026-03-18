@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Search, Filter, Package, Users, X } from 'lucide-react'
-import { useGetPurchaseOrdersQuery, useGetVendorsQuery, useCreatePurchaseOrderMutation } from '../store/api'
+import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Purchase.css'
 
@@ -41,7 +41,7 @@ export default function Purchase() {
     search || undefined,
     { refetchOnMountOrArgChange: 120 }
   )
-  const { data: vendorData, isLoading: vendorLoading, isError: vendorError } = useGetVendorsQuery(
+  const { data: customersData, isLoading: customersLoading, isError: customersError } = useGetCustomersQuery(
     search || undefined,
     { refetchOnMountOrArgChange: 120 }
   )
@@ -88,10 +88,14 @@ export default function Purchase() {
     }
   })
 
-  const vendors = (vendorError || !vendorData?.data ? fallbackVendors : vendorData.data).map((v) => ({
-    ...v,
-    balanceFormatted: typeof v.balance === 'number' ? formatCurrency(v.balance) : v.balance,
-    lastOrderFormatted: formatDate(v.lastOrder),
+  const vendors = (customersError || !customersData?.data ? fallbackVendors : customersData.data).map((c) => ({
+    id: c.pid ?? c.id,
+    name: c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`,
+    contact: c.mobno ?? c.contact ?? '—',
+    balance: c.balance ?? 0,
+    lastOrder: c.last_order ?? c.lastOrder ?? '',
+    balanceFormatted: typeof (c.balance ?? 0) === 'number' ? formatCurrency(c.balance) : (c.balance ?? '—'),
+    lastOrderFormatted: formatDate(c.last_order ?? c.lastOrder),
   }))
 
   return (
@@ -184,20 +188,20 @@ export default function Purchase() {
           <div className="filters-row">
             <div className="search-box">
               <Search size={18} className="search-icon" />
-              <input
-                type="search"
-                placeholder="Search vendors..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="search-input"
-              />
+            <input
+              type="search"
+              placeholder="Search by name, contact..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="search-input"
+            />
             </div>
             <button type="button" className="btn btn-primary btn-sm">
               <Plus size={16} />
               Add Vendor
             </button>
           </div>
-          {vendorLoading && !vendorData && <div className="page-loading">Loading...</div>}
+          {customersLoading && !customersData && <div className="page-loading">Loading...</div>}
           <div className="table-wrap">
             <table className="data-table">
               <thead>

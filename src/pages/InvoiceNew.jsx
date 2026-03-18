@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { X, Plus, Calculator, Settings } from 'lucide-react'
-import { useGetCustomersQuery, useGetItemsQuery, useCreateInvoiceMutation } from '../store/api'
+import { useGetCustomersQuery, useGetItemsQuery, useCreateInvoiceMutation, useCreateCustomerMutation } from '../store/api'
 import { formatCurrency } from '../utils/format'
 import './InvoiceNew.css'
 
@@ -34,8 +34,9 @@ export default function InvoiceNew() {
   const navigate = useNavigate()
   const [invoiceType, setInvoiceType] = useState('sale') // sale | purchase
   const [credit, setCredit] = useState(false)
-  const [customerId, setCustomerId] = useState('')
+  const [customerInput, setCustomerInput] = useState('')
   const [billingName, setBillingName] = useState('')
+  const [billingAddress, setBillingAddress] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
   const [stateOfSupply, setStateOfSupply] = useState('')
@@ -50,19 +51,27 @@ export default function InvoiceNew() {
   const { data: itemsData } = useGetItemsQuery(undefined, { skip: false })
   const items = itemsData?.data ?? []
   const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
+  const [createCustomer, { isLoading: isCreatingCustomer }] = useCreateCustomerMutation()
 
-  const selectedCustomer = customers.find((c) => String(c.pid ?? c.id) === String(customerId))
+  const selectedCustomer = customers.find(
+    (c) => (c.partyname || c.name || '').trim().toLowerCase() === customerInput.trim().toLowerCase()
+  )
   const isSameState = stateOfSupply && stateOfSupply.trim() === BUSINESS_STATE
 
   useEffect(() => {
-    if (!customerId || !selectedCustomer) return
+    if (!selectedCustomer) return
     if (selectedCustomer.state) setStateOfSupply(selectedCustomer.state)
     setBillingName(
       (selectedCustomer.billing_name && String(selectedCustomer.billing_name).trim()) ||
       selectedCustomer.partyname ||
       ''
     )
-  }, [customerId, selectedCustomer?.pid, selectedCustomer?.state, selectedCustomer?.billing_name, selectedCustomer?.partyname])
+    setBillingAddress(
+      (selectedCustomer.addr && String(selectedCustomer.addr).trim()) ||
+      selectedCustomer.address ||
+      ''
+    )
+  }, [selectedCustomer?.pid, selectedCustomer?.partyname])
 
   const recalcLineAmount = (line, type) => {
     const qty = Number(line.qty) || 0
@@ -146,17 +155,45 @@ export default function InvoiceNew() {
   const total = totalBeforeRound + (roundOff ? (Number(roundOffValue) || 0) : 0)
 
   const handleSave = async () => {
+    const nameTrim = customerInput.trim()
+    if (!nameTrim) {
+      alert('Please select or enter customer name.')
+      return
+    }
+    let pid = selectedCustomer ? (selectedCustomer.pid ?? selectedCustomer.id) : null
+    if (pid == null) {
+      try {
+        const res = await createCustomer({
+          partyname: nameTrim,
+          mobno: '',
+          city: '',
+          state: stateOfSupply || '',
+          gst_reg: 0,
+          same_state: 1,
+        }).unwrap()
+        const created = res?.data ?? res
+        pid = created?.pid ?? created?.id ?? 0
+      } catch (err) {
+        console.error('Create customer failed:', err)
+        alert(err?.data?.message || err?.data?.detail || 'Could not create customer. Try again.')
+        return
+      }
+    }
     const sameState = stateOfSupply && stateOfSupply.trim() === BUSINESS_STATE
+    const cgstAmt = sameState ? Math.round(totalTax / 2) : 0
+    const sgstAmt = sameState ? Math.round(totalTax / 2) : 0
+    const igstAmt = sameState ? 0 : Math.round(totalTax)
     const payload = {
       inv_no: invoiceNumber || '',
       dt: invoiceDate,
       state: stateOfSupply || '',
-      pid: customerId ? Number(customerId) : 0,
+      pid: Number(pid) || 0,
+      addr: billingAddress.trim() || '',
       gst: 18,
       payment: Math.round(Number(total) || 0),
-      cgst: sameState ? 9 : 0,
-      sgst: sameState ? 9 : 0,
-      igst: sameState ? 0 : 18,
+      cgst: cgstAmt,
+      sgst: sgstAmt,
+      igst: igstAmt,
       paytype: credit ? 1 : 0,
       paynow: 1,
       payby: 1,
@@ -224,19 +261,20 @@ export default function InvoiceNew() {
         <div className="invoice-form-row">
           <div className="form-group">
             <label>Customer <span className="required">*</span></label>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+            <input
+              type="text"
+              value={customerInput}
+              onChange={(e) => setCustomerInput(e.target.value)}
+              list="customer-list"
               className="form-input"
+              placeholder="Select or type customer name"
               required
-            >
-              <option value="">Select customer</option>
+            />
+            <datalist id="customer-list">
               {customers.map((c) => (
-                <option key={c.pid ?? c.id} value={c.pid ?? c.id}>
-                  {c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`}
-                </option>
+                <option key={c.pid ?? c.id} value={c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`} />
               ))}
-            </select>
+            </datalist>
           </div>
           <div className="form-group">
             <label>Billing Name (Optional)</label>
@@ -246,6 +284,16 @@ export default function InvoiceNew() {
               onChange={(e) => setBillingName(e.target.value)}
               className="form-input"
               placeholder="Billing name"
+            />
+          </div>
+          <div className="form-group">
+            <label>Billing Address (Optional)</label>
+            <input
+              type="text"
+              value={billingAddress}
+              onChange={(e) => setBillingAddress(e.target.value)}
+              className="form-input"
+              placeholder="Billing address"
             />
           </div>
           <div className="form-group">
@@ -449,8 +497,8 @@ export default function InvoiceNew() {
           <button type="button" className="btn btn-secondary">
             Share
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save'}
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving || isCreatingCustomer}>
+            {isSaving ? 'Saving...' : isCreatingCustomer ? 'Creating customer...' : 'Save'}
           </button>
         </div>
       </div>

@@ -59,7 +59,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'Sale', 'PurchaseOrder', 'Vendor', 'Customer', 'Item'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     // Dashboard – ek hi call, sab stats + recent lists
@@ -87,22 +87,8 @@ export const billingApi = createApi({
     }),
     createInvoice: builder.mutation({
       query: (body) => ({ url: '/invoices', method: 'POST', body }),
-      invalidatesTags: ['Invoice', 'Dashboard', 'Sale'],
+      invalidatesTags: ['Invoice', 'Dashboard'],
     }),
-    // Sales
-    getSales: builder.query({
-      query: (search) => ({
-        url: search ? `/sales?search=${encodeURIComponent(search)}` : '/sales',
-      }),
-      transformResponse: normalizeList,
-      providesTags: (result) =>
-        result?.data ? [...result.data.map(({ id }) => ({ type: 'Sale', id })), 'Sale'] : ['Sale'],
-    }),
-    createSale: builder.mutation({
-      query: (body) => ({ url: '/sales', method: 'POST', body }),
-      invalidatesTags: ['Sale', 'Dashboard', 'Invoice'],
-    }),
-
     // Purchase orders
     getPurchaseOrders: builder.query({
       query: (search) => ({
@@ -178,8 +164,6 @@ export const {
   useGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useCreateInvoiceMutation,
-  useGetSalesQuery,
-  useCreateSaleMutation,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
   useGetVendorsQuery,

@@ -53,6 +53,7 @@ export default function Customers() {
         state: form.state.trim(),
         gst_reg: Number(form.gst_reg) || 0,
         same_state: Number(form.same_state) || 0,
+        prtytyp: 0,
       }).unwrap()
       setForm(initialForm)
       setModalOpen(false)
