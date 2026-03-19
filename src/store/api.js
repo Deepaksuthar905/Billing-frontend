@@ -71,10 +71,12 @@ export const billingApi = createApi({
 
     // Invoices
     getInvoices: builder.query({
-      query: ({ search, status } = {}) => {
+      query: ({ search, status, from, to } = {}) => {
         const params = new URLSearchParams()
         if (search) params.set('search', search)
         if (status) params.set('status', status)
+        if (from) params.set('from', from)
+        if (to) params.set('to', to)
         return { url: `/invoices?${params}` }
       },
       transformResponse: normalizeList,
@@ -103,6 +105,12 @@ export const billingApi = createApi({
     createPurchaseOrder: builder.mutation({
       query: (body) => ({ url: '/purchases', method: 'POST', body }),
       invalidatesTags: ['PurchaseOrder', 'Dashboard', 'Vendor'],
+    }),
+
+    getGstRateReport: builder.query({
+      query: ({ from, to }) => ({
+        url: `/gstratereport?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      }),
     }),
 
     // Vendors
@@ -171,6 +179,7 @@ export const {
   useCreateInvoiceMutation,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
+  useGetGstRateReportQuery,
   useGetVendorsQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
