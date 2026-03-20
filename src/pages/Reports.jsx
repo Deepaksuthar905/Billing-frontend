@@ -4,7 +4,13 @@ import { useGetGstRateReportQuery, useGetInvoicesQuery } from '../store/api'
 import './Reports.css'
 
 const formatReportAmount = (num) =>
-  num != null ? `₹ ${Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+  `₹ ${Number(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const getDisplayValue = (value) => {
+  if (value == null) return '0'
+  if (typeof value === 'string' && value.trim() === '') return '0'
+  return value
+}
 
 function buildGstRateRows(data) {
   if (!data || typeof data !== 'object') {
@@ -94,17 +100,33 @@ export default function Reports() {
     const sgst = Number(inv.sgst) || 0
     const igst = Number(inv.igst) || 0
     const totalTax = cgst + sgst + igst
-    const payment = Number(inv.payment) || 0
-    const taxableValue = payment - totalTax
+    /** API `amount` = invoice value column; fallback `payment` for older payloads */
+    const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
+    const taxableValue = invoiceValue - totalTax
+    const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
+    const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
+    const taxRate =
+      gstPercent != null && !Number.isNaN(gstPercent)
+        ? gstPercent
+        : safeTaxableValue > 0
+          ? (totalTax / safeTaxableValue) * 100
+          : 0
     return {
+      gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
+      partyName: inv.customer ?? inv.customer_name ?? inv.partyname,
       invNo: inv.inv_no ?? inv.id,
       date: inv.dt ?? inv.date,
-      customer: inv.customer ?? inv.customer_name ?? inv.partyname ?? '—',
-      taxableValue: taxableValue > 0 ? taxableValue : payment,
+      value: invoiceValue,
+      taxRate,
+      taxableValue: safeTaxableValue,
       cgst,
       sgst,
       igst,
-      total: payment,
+      /** Table columns: Integrated → SGST, Central → IGST, State → CGST (per report layout) */
+      integratedTaxDisplay: sgst,
+      centralTaxDisplay: igst,
+      stateTaxDisplay: cgst,
+      placeOfSupply: inv.state ?? inv.place_of_supply ?? inv.state_name ?? inv.pos,
     }
   })
   const gstr1HsnSummary = gstr1Rows.length
@@ -113,7 +135,7 @@ export default function Reports() {
         totalCgst: gstr1Rows.reduce((s, r) => s + r.cgst, 0),
         totalSgst: gstr1Rows.reduce((s, r) => s + r.sgst, 0),
         totalIgst: gstr1Rows.reduce((s, r) => s + r.igst, 0),
-        total: gstr1Rows.reduce((s, r) => s + r.total, 0),
+        total: gstr1Rows.reduce((s, r) => s + (r.value || 0), 0),
       }
     : null
 
@@ -243,27 +265,35 @@ export default function Reports() {
                 <table className="gst-rate-table">
                   <thead>
                     <tr>
-                      <th>Invoice No</th>
+                      <th>Sno.</th>
+                      <th>GSTIN</th>
+                      <th>Party Name</th>
+                      <th>Invoice no.</th>
                       <th>Date</th>
-                      <th>Customer / Party</th>
+                      <th className="text-right">Value</th>
+                      <th className="text-right">Tax Rate</th>
                       <th className="text-right">Taxable Value</th>
-                      <th className="text-right">CGST</th>
-                      <th className="text-right">SGST</th>
-                      <th className="text-right">IGST</th>
-                      <th className="text-right">Total</th>
+                      <th className="text-right">Integrated Tax</th>
+                      <th className="text-right">Central Tax</th>
+                      <th className="text-right">State Tax</th>
+                      <th>Place of Supply</th>
                     </tr>
                   </thead>
                   <tbody>
                     {gstr1Rows.map((row, i) => (
                       <tr key={i}>
-                        <td>{row.invNo}</td>
-                        <td>{row.date}</td>
-                        <td>{row.customer}</td>
+                        <td>{i + 1}</td>
+                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getDisplayValue(row.partyName)}</td>
+                        <td>{getDisplayValue(row.invNo)}</td>
+                        <td>{getDisplayValue(row.date)}</td>
+                        <td className="text-right">{formatReportAmount(row.value)}</td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
-                        <td className="text-right">{formatReportAmount(row.cgst)}</td>
-                        <td className="text-right">{formatReportAmount(row.sgst)}</td>
-                        <td className="text-right">{formatReportAmount(row.igst)}</td>
-                        <td className="text-right">{formatReportAmount(row.total)}</td>
+                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
+                        <td>{getDisplayValue(row.placeOfSupply)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -277,13 +307,13 @@ export default function Reports() {
                       <tr>
                         <th>HSN</th>
                         <th className="text-right">Taxable Value</th>
-                        <th className="text-right">CGST</th>
-                        <th className="text-right">SGST</th>
-                        <th className="text-right">IGST</th>
-                        <th className="text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                      <th className="text-right">CGST</th>
+                      <th className="text-right">SGST</th>
+                      <th className="text-right">IGST</th>
+                      <th className="text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                       <tr>
                         <td>—</td>
                         <td className="text-right">{formatReportAmount(gstr1HsnSummary.totalTaxable)}</td>
