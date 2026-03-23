@@ -93,9 +93,17 @@ export const billingApi = createApi({
     }),
     // Purchase orders
     getPurchaseOrders: builder.query({
-      query: (search) => ({
-        url: search ? `/purchases?search=${encodeURIComponent(search)}` : '/purchases',
-      }),
+      query: (arg) => {
+        const params = new URLSearchParams()
+        if (typeof arg === 'string' && arg) params.set('search', arg)
+        else if (arg && typeof arg === 'object') {
+          if (arg.search) params.set('search', arg.search)
+          if (arg.from) params.set('from', arg.from)
+          if (arg.to) params.set('to', arg.to)
+        }
+        const qs = params.toString()
+        return { url: qs ? `/purchases?${qs}` : '/purchases' }
+      },
       transformResponse: normalizeList,
       providesTags: (result) =>
         result?.data

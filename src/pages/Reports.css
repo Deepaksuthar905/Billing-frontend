@@ -119,6 +119,51 @@
   margin-bottom: 0.75rem;
 }
 
+.purchase-reg-report {
+  padding: 1rem 0;
+}
+
+.purchase-reg-tfoot td {
+  border-top: 2px solid var(--border, #e5e7eb);
+  padding-top: 0.65rem;
+  background: var(--bg-secondary, #f9fafb);
+}
+
+/* GSTR-3B summary */
+.gstr3b-report {
+  padding: 1rem 0;
+}
+
+.gstr3b-note {
+  max-width: 52rem;
+  line-height: 1.45;
+  margin-bottom: 1rem;
+}
+
+.gstr3b-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.gstr3b-card .card-title {
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+.gstr3b-foot {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.gstr3b-foot code {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.25rem;
+  background: var(--bg-secondary, #f3f4f6);
+  border-radius: 3px;
+}
+
 /* GST Rate Report */
 .gst-rate-report {
   padding: 1rem 0;
