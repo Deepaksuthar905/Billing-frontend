@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BarChart3, TrendingUp, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
 import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery } from '../store/api'
+import { exportCurrentReport } from '../utils/reportExcelExport'
 import './Reports.css'
 
 const formatReportAmount = (num) =>
@@ -339,6 +340,32 @@ export default function Reports() {
     if (id === 'gst') setActiveGstSub('gstr1')
   }
 
+  const handleExportExcel = () => {
+    exportCurrentReport({
+      activeReportId,
+      activeGstSub,
+      mockSalesReport,
+      gstr1From,
+      gstr1To,
+      gstr1Rows,
+      gstr1HsnSummary,
+      gstr3bFrom,
+      gstr3bTo,
+      outward3b,
+      itc3b,
+      net3b,
+      gstr3bInvoicesFiltered,
+      gstr3bPurchasesFiltered,
+      purchaseRegFrom,
+      purchaseRegTo,
+      purchaseRegRows,
+      purchaseRegRaw,
+      gstRateFrom,
+      gstRateTo,
+      gstRateRows,
+    })
+  }
+
   return (
     <div className="reports-page">
       <div className="page-header">
@@ -357,7 +384,7 @@ export default function Reports() {
               <option value="custom">Custom range</option>
             </select>
           </div>
-          <button type="button" className="btn btn-secondary">
+          <button type="button" className="btn btn-secondary" onClick={handleExportExcel} title="Download Excel (.xlsx)">
             <Download size={18} />
             Export
           </button>
