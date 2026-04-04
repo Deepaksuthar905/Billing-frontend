@@ -1,6 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+/** Live Laravel API; override with VITE_API_BASE_URL for local (e.g. http://127.0.0.1:8000/api) */
+const DEFAULT_API_BASE = 'https://superplayerauction.com/billing/api'
+
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, '')
+
+const baseUrl = API_BASE_URL
 
 /** Backend { data: [] }, { results: [] } (Django), ya direct [] accept karta hai */
 function normalizeList(response) {

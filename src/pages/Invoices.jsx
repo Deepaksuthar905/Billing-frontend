@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Search, Filter, Eye, Edit, RefreshCw } from 'lucide-react'
-import { useGetInvoicesQuery } from '../store/api'
+import { API_BASE_URL, useGetInvoicesQuery } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Invoices.css'
-
-const SYNC_INVOICES_URL = 'http://127.0.0.1:8000/api/sync-invoices'
 
 export default function Invoices() {
   const [search, setSearch] = useState('')
@@ -31,7 +29,7 @@ export default function Invoices() {
   const handleSync = async () => {
     const from = dateFrom || new Date().toISOString().slice(0, 10)
     const to = dateTo || new Date().toISOString().slice(0, 10)
-    const url = `${SYNC_INVOICES_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    const url = `${API_BASE_URL}/sync-invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
     setIsSyncing(true)
     try {
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
