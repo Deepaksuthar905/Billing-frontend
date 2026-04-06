@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
-import { useGetExpenseHeadsQuery, useGetExpensesQuery } from '../store/api'
+import { Plus, Search, Trash2 } from 'lucide-react'
+import { useGetExpenseHeadsQuery, useGetExpensesQuery, useDeleteExpenseMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Expenses.css'
 
@@ -11,6 +11,9 @@ export default function Expenses() {
   const [selectedHeadId, setSelectedHeadId] = useState(null)
   const [search, setSearch] = useState('')
   const [rightSearch, setRightSearch] = useState('')
+  const [deleteTargetId, setDeleteTargetId] = useState(null)
+
+  const [deleteExpense, { isLoading: isDeleting }] = useDeleteExpenseMutation()
 
   const { data: headsData, isLoading: headsLoading } = useGetExpenseHeadsQuery(undefined, {
     refetchOnMountOrArgChange: 120,
@@ -161,7 +164,17 @@ export default function Expenses() {
                       <td>{PAYBY_LABELS[exp.payby] ?? '—'}</td>
                       <td>{formatCurrency(Number(exp.payment) || 0)}</td>
                       <td>
-                        <button type="button" className="btn-icon">→</button>
+                        <div className="action-btns">
+                          <button type="button" className="btn-icon">→</button>
+                          <button
+                            type="button"
+                            className="btn-icon btn-icon--danger"
+                            aria-label="Delete"
+                            onClick={() => setDeleteTargetId(exp.exid)}
+                          >
+                            <Trash2 size={15} color='red' />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -171,6 +184,46 @@ export default function Expenses() {
           </div>
         </section>
       </div>
+      {deleteTargetId && (
+        <div className="modal-overlay" onClick={() => setDeleteTargetId(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Expense</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text, #1f2937)' }}>
+                Are you sure you want to delete this expense? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDeleteTargetId(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    await deleteExpense(deleteTargetId).unwrap()
+                    setDeleteTargetId(null)
+                  } catch (err) {
+                    console.error('Delete failed:', err)
+                    alert(err?.data?.message || 'Could not delete expense.')
+                  }
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

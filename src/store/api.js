@@ -222,6 +222,10 @@ export const billingApi = createApi({
       query: (body) => ({ url: '/expenses', method: 'POST', body }),
       invalidatesTags: ['Expense', 'Dashboard'],
     }),
+    deleteExpense: builder.mutation({
+      query: (exid) => ({ url: `/delexpenses/${exid}`, method: 'POST' }),
+      invalidatesTags: ['Expense', 'ExpenseHead', 'Dashboard'],
+    }),
   }),
 })
 
@@ -244,4 +248,5 @@ export const {
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,
   useCreateExpenseMutation,
+  useDeleteExpenseMutation,
 } = billingApi
