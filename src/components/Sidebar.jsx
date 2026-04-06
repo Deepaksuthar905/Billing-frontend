@@ -7,6 +7,7 @@ import {
   Users,
   FileText,
   BarChart3,
+  Receipt,
 } from 'lucide-react'
 import './Sidebar.css'
 
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/purchase', icon: Package, label: 'Purchase' },
+  { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/inventory', icon: Boxes, label: 'Inventory' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },

@@ -64,7 +64,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     // Dashboard – ek hi call, sab stats + recent lists
@@ -182,6 +182,42 @@ export const billingApi = createApi({
       query: ({ id, ...body }) => ({ url: `/items/${id}`, method: 'PUT', body }),
       invalidatesTags: (_r, _e, { id }) => [{ type: 'Item', id }, 'Item', 'Dashboard'],
     }),
+
+    // Expense Heads (Categories)
+    getExpenseHeads: builder.query({
+      query: () => ({ url: '/expenses-heads' }),
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map(({ id }) => ({ type: 'ExpenseHead', id })), 'ExpenseHead']
+          : ['ExpenseHead'],
+    }),
+    createExpenseHead: builder.mutation({
+      query: (body) => ({ url: '/expenses-heads', method: 'POST', body }),
+      invalidatesTags: ['ExpenseHead'],
+    }),
+
+    // Expenses
+    getExpenses: builder.query({
+      query: ({ search, from, to, exp_head_id } = {}) => {
+        const params = new URLSearchParams()
+        if (search) params.set('search', search)
+        if (from) params.set('from', from)
+        if (to) params.set('to', to)
+        if (exp_head_id) params.set('exp_head_id', exp_head_id)
+        const qs = params.toString()
+        return { url: qs ? `/expenses?${qs}` : '/expenses' }
+      },
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map(({ id }) => ({ type: 'Expense', id })), 'Expense']
+          : ['Expense'],
+    }),
+    createExpense: builder.mutation({
+      query: (body) => ({ url: '/expenses', method: 'POST', body }),
+      invalidatesTags: ['Expense', 'Dashboard'],
+    }),
   }),
 })
 
@@ -199,4 +235,8 @@ export const {
   useGetItemsQuery,
   useCreateItemMutation,
   useUpdateItemMutation,
+  useGetExpenseHeadsQuery,
+  useCreateExpenseHeadMutation,
+  useGetExpensesQuery,
+  useCreateExpenseMutation,
 } = billingApi

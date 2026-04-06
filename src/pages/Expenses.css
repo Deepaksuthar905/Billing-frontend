@@ -1,0 +1,234 @@
+.expenses-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.expenses-layout {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+/* ── Left panel ── */
+.expenses-left {
+  width: 300px;
+  min-width: 260px;
+  border-right: 1px solid var(--border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #fff);
+  overflow: hidden;
+}
+
+.expenses-left-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.exp-search-box {
+  flex: 1;
+  position: relative;
+}
+
+.exp-search-icon {
+  position: absolute;
+  left: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted, #6b7280);
+  pointer-events: none;
+}
+
+.exp-search-input {
+  width: 100%;
+  padding: 0.4rem 0.75rem 0.4rem 2rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 6px);
+  font-size: 0.85rem;
+  background: var(--bg-surface, #f9fafb);
+  color: var(--text, #1f2937);
+  outline: none;
+}
+
+.exp-search-input:focus {
+  border-color: var(--primary, #4f46e5);
+  background: #fff;
+}
+
+.exp-add-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.exp-category-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.exp-category-header-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-surface, #f9fafb);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.exp-category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text, #1f2937);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.exp-category-item:hover {
+  background: var(--bg-surface, #f9fafb);
+}
+
+.exp-category-item--active {
+  background: #eff6ff;
+  color: var(--primary, #4f46e5);
+  font-weight: 600;
+}
+
+.exp-cat-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exp-cat-amount {
+  font-weight: 600;
+  color: var(--text, #1f2937);
+  margin-left: 0.5rem;
+}
+
+.exp-category-item--active .exp-cat-amount {
+  color: var(--primary, #4f46e5);
+}
+
+/* ── Right panel ── */
+.expenses-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg, #fff);
+}
+
+.exp-select-prompt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.95rem;
+}
+
+.exp-right-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.exp-right-head-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.exp-right-head-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+}
+
+.exp-right-head-type {
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.exp-right-head-totals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text, #1f2937);
+  font-weight: 500;
+}
+
+.exp-right-toolbar {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.exp-right-toolbar .exp-search-box {
+  max-width: 280px;
+}
+
+.expenses-right .table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.5rem;
+}
+
+.exp-no-data {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.exp-loading {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.9rem;
+}
+
+.exp-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .expenses-layout {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .expenses-left {
+    width: 100%;
+    height: auto;
+    max-height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+  }
+}

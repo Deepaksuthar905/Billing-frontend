@@ -8,6 +8,8 @@ import Customers from './pages/Customers'
 import Reports from './pages/Reports'
 import Invoices from './pages/Invoices'
 import InvoiceNew from './pages/InvoiceNew'
+import Expenses from './pages/Expenses'
+import ExpenseNew from './pages/ExpenseNew'
 
 function App() {
   return (
@@ -21,6 +23,8 @@ function App() {
         <Route path="customers" element={<Customers />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceNew />} />
+        <Route path="expenses" element={<Expenses />} />
+        <Route path="expenses/new" element={<ExpenseNew />} />
         <Route path="reports" element={<Reports />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
