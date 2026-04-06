@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Eye, Edit, RefreshCw } from 'lucide-react'
-import { API_BASE_URL, useGetInvoicesQuery } from '../store/api'
+import { Plus, Search, Filter, Eye, Edit, RefreshCw, Trash2 } from 'lucide-react'
+import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Invoices.css'
 
@@ -11,6 +11,9 @@ export default function Invoices() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [isSyncing, setIsSyncing] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState(null)
+
+  const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
     { search: search || undefined, status: status || undefined },
@@ -151,6 +154,14 @@ export default function Invoices() {
                       <button type="button" className="btn-icon" aria-label="Edit">
                         <Edit size={16} />
                       </button>
+                      <button
+                        type="button"
+                        className="btn-icon btn-icon--danger"
+                        aria-label="Delete"
+                        onClick={() => setDeleteTargetId(inv.id)}
+                      >
+                        <Trash2 size={16} color='red' />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -159,6 +170,47 @@ export default function Invoices() {
           </table>
         </div>
       </div>
+      {deleteTargetId && (
+        <div className="modal-overlay" onClick={() => setDeleteTargetId(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Invoice</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text, #1f2937)' }}>
+                Are you sure you want to delete invoice?
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDeleteTargetId(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    await deleteInvoice(deleteTargetId).unwrap()
+                    setDeleteTargetId(null)
+                    refetch()
+                  } catch (err) {
+                    console.error('Delete failed:', err)
+                    alert(err?.data?.message || 'Could not delete invoice.')
+                  }
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

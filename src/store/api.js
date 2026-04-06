@@ -96,6 +96,10 @@ export const billingApi = createApi({
       query: (body) => ({ url: '/invoices', method: 'POST', body }),
       invalidatesTags: ['Invoice', 'Dashboard'],
     }),
+    deleteInvoice: builder.mutation({
+      query: (id) => ({ url: `/invoices/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Invoice', 'Dashboard'],
+    }),
     // Purchase orders
     getPurchaseOrders: builder.query({
       query: (arg) => {
@@ -226,6 +230,7 @@ export const {
   useGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useCreateInvoiceMutation,
+  useDeleteInvoiceMutation,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
   useGetGstRateReportQuery,
