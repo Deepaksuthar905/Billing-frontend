@@ -123,6 +123,10 @@ export const billingApi = createApi({
       query: (body) => ({ url: '/purchases', method: 'POST', body }),
       invalidatesTags: ['PurchaseOrder', 'Dashboard', 'Vendor'],
     }),
+    deletePurchaseOrder: builder.mutation({
+      query: (id) => ({ url: `/delpurchase/${id}`, method: 'POST' }),
+      invalidatesTags: ['PurchaseOrder', 'Dashboard'],
+    }),
 
     getGstRateReport: builder.query({
       query: ({ from, to }) => ({
@@ -237,6 +241,7 @@ export const {
   useDeleteInvoiceMutation,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
+  useDeletePurchaseOrderMutation,
   useGetGstRateReportQuery,
   useGetVendorsQuery,
   useGetCustomersQuery,

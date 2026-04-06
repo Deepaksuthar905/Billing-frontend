@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Package, Users } from 'lucide-react'
-import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation } from '../store/api'
+import { Plus, Search, Filter, Package, Users, Trash2 } from 'lucide-react'
+import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation, useDeletePurchaseOrderMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Purchase.css'
 
@@ -21,6 +21,9 @@ const fallbackVendors = [
 export default function Purchase() {
   const [activeTab, setActiveTab] = useState('orders')
   const [search, setSearch] = useState('')
+  const [deleteTargetId, setDeleteTargetId] = useState(null)
+
+  const [deletePurchaseOrder, { isLoading: isDeleting }] = useDeletePurchaseOrderMutation()
 
   const { data: poData, isLoading: poLoading, isError: poError } = useGetPurchaseOrdersQuery(
     search || undefined,
@@ -126,7 +129,17 @@ export default function Purchase() {
                       </span>
                     </td>
                     <td>
-                      <button type="button" className="btn-icon">→</button>
+                      <div className="action-btns">
+                        <button type="button" className="btn-icon">→</button>
+                        <button
+                          type="button"
+                          className="btn-icon btn-icon--danger"
+                          aria-label="Delete"
+                          onClick={() => setDeleteTargetId(po.prid ?? po.id)}
+                        >
+                          <Trash2 size={15} color='red' />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -180,6 +193,47 @@ export default function Purchase() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {deleteTargetId && (
+        <div className="modal-overlay" onClick={() => setDeleteTargetId(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Purchase Order</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text, #1f2937)' }}>
+                Are you sure you want to delete purchase order ?
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDeleteTargetId(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isDeleting}
+                onClick={async () => {
+                  try {
+                    await deletePurchaseOrder(deleteTargetId).unwrap()
+                    setDeleteTargetId(null)
+                  } catch (err) {
+                    console.error('Delete failed:', err)
+                    alert(err?.data?.message || 'Could not delete purchase order.')
+                  }
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
