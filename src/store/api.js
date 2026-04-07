@@ -191,6 +191,18 @@ export const billingApi = createApi({
       invalidatesTags: (_r, _e, { id }) => [{ type: 'Item', id }, 'Item', 'Dashboard'],
     }),
 
+    // Ledger
+    getLedger: builder.query({
+      query: ({ from, to }) => ({
+        url: `/ledger?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        method: 'POST',
+      }),
+      transformResponse: (r) => ({
+        entries: Array.isArray(r?.entries) ? r.entries : [],
+        summary: r?.summary ?? null,
+      }),
+    }),
+
     // Expense Heads (Categories)
     getExpenseHeads: builder.query({
       query: () => ({ url: '/expenses-heads' }),
@@ -249,6 +261,7 @@ export const {
   useGetItemsQuery,
   useCreateItemMutation,
   useUpdateItemMutation,
+  useGetLedgerQuery,
   useGetExpenseHeadsQuery,
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,

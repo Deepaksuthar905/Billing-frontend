@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Eye, Edit, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, Search, Eye, Edit, RefreshCw, Trash2 } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Invoices.css'
@@ -10,13 +10,20 @@ export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
-    { search: search || undefined, status: status || undefined },
+    {
+      search: search || undefined,
+      status: status || undefined,
+      from: filterFrom || undefined,
+      to: filterTo || undefined,
+    },
     { refetchOnMountOrArgChange: 120 }
   )
 
@@ -107,10 +114,33 @@ export default function Invoices() {
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>
           </select>
-          <button type="button" className="btn btn-secondary btn-sm">
-            <Filter size={16} />
-            Filter
-          </button>
+          <div className="inv-date-filter">
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              className="input-sm"
+              title="From date"
+            />
+            <span className="inv-date-sep">—</span>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              className="input-sm"
+              title="To date"
+            />
+            {(filterFrom || filterTo) && (
+              <button
+                type="button"
+                className="btn-clear-filter"
+                onClick={() => { setFilterFrom(''); setFilterTo('') }}
+                title="Clear dates"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading && !data && <div className="page-loading">Loading...</div>}

@@ -396,3 +396,207 @@
     height: 140px;
   }
 }
+
+/* ── Ledger ── */
+.ledger-summary-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ledger-summary-card {
+  flex: 1;
+  min-width: 160px;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ledger-summary-card--credit {
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+}
+
+.ledger-summary-card--debit {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.ledger-summary-card--balance {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.ledger-summary-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.ledger-summary-card--credit .ledger-summary-label { color: #166534; }
+.ledger-summary-card--debit .ledger-summary-label { color: #991b1b; }
+.ledger-summary-card--balance .ledger-summary-label { color: #1e40af; }
+
+.ledger-summary-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.ledger-summary-card--credit .ledger-summary-value { color: #15803d; }
+.ledger-summary-card--debit .ledger-summary-value { color: #dc2626; }
+.ledger-summary-card--balance .ledger-summary-value { color: #1d4ed8; }
+
+.ledger-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.ledger-date-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ledger-date-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+}
+
+.ledger-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.ledger-table th {
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  letter-spacing: 0.05em;
+  background: var(--bg-surface, #f9fafb);
+  border-bottom: 2px solid var(--border, #e5e7eb);
+  white-space: nowrap;
+}
+
+.ledger-table td {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border, #f3f4f6);
+  vertical-align: middle;
+  color: var(--text, #1f2937);
+}
+
+.ledger-table tr:hover td {
+  background: var(--bg-surface, #f9fafb);
+}
+
+.ledger-date {
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.ledger-particulars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ledger-party {
+  font-weight: 500;
+  color: var(--text, #1f2937);
+}
+
+.ledger-narration {
+  font-size: 0.78rem;
+  color: var(--text-muted, #9ca3af);
+}
+
+.ledger-type-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.ledger-type-badge--sale,
+.ledger-type-badge--sales,
+.ledger-type-badge--invoice {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.ledger-type-badge--purchase {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.ledger-type-badge--expense {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.ledger-type-badge--payment {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.ledger-debit {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.ledger-credit {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.ledger-balance {
+  font-weight: 500;
+  color: var(--text, #1f2937);
+}
+
+.ledger-dr-cr {
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.ledger-totals-row td {
+  background: var(--bg-surface, #f9fafb);
+  border-top: 2px solid var(--border, #e5e7eb);
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.text-right {
+  text-align: right !important;
+}
+
+@media (max-width: 768px) {
+  .ledger-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

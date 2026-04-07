@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BarChart3, TrendingUp, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
-import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery } from '../store/api'
+import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery, useGetLedgerQuery } from '../store/api'
 import { exportCurrentReport } from '../utils/reportExcelExport'
 import './Reports.css'
 
@@ -73,6 +73,7 @@ const reportCategories = [
   { id: 'gst', title: 'GST Reports', desc: 'GSTR-1, 3B, purchase register, rate-wise tax', icon: FileText },
   { id: 'profit', title: 'Profit & Loss', desc: 'Revenue, expenses and profit', icon: BarChart3 },
   { id: 'inventory', title: 'Stock Summary', desc: 'Current stock and valuation', icon: BarChart3 },
+  { id: 'ledger', title: 'Ledger', desc: 'Date-wise debit, credit and balance entries', icon: FileText },
 ]
 
 const gstSubOptions = [
@@ -205,6 +206,8 @@ export default function Reports() {
   const [gstr3bTo, setGstr3bTo] = useState('2026-03-18')
   const [purchaseRegFrom, setPurchaseRegFrom] = useState(() => defaultPurchaseRegFrom())
   const [purchaseRegTo, setPurchaseRegTo] = useState(() => defaultPurchaseRegTo())
+  const [ledgerFrom, setLedgerFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10))
+  const [ledgerTo, setLedgerTo] = useState(new Date().toISOString().slice(0, 10))
 
   const { data: invoicesData, isLoading: gstr1Loading } = useGetInvoicesQuery(
     { from: gstr1From, to: gstr1To },
@@ -330,6 +333,13 @@ export default function Reports() {
     { from: gstRateFrom, to: gstRateTo },
     { skip: !(activeReportId === 'gst' && activeGstSub === 'gst-rate') }
   )
+
+  const { data: ledgerData, isLoading: ledgerLoading, refetch: ledgerRefetch } = useGetLedgerQuery(
+    { from: ledgerFrom, to: ledgerTo },
+    { skip: activeReportId !== 'ledger', refetchOnMountOrArgChange: true }
+  )
+  const ledgerRows = ledgerData?.entries ?? []
+  const ledgerSummary = ledgerData?.summary ?? null
 
   const gstRateRows = buildGstRateRows(gstRateData?.data)
 
@@ -848,6 +858,131 @@ export default function Reports() {
               <h2 className="card-title">Stock Summary</h2>
               <p className="report-placeholder">{activeReport.desc}</p>
               <p className="report-placeholder text-muted">Current stock and valuation will appear here.</p>
+            </div>
+          )}
+
+          {activeReportId === 'ledger' && (
+            <div className="card">
+              {/* Date filter row */}
+              <div className="ledger-toolbar">
+                <h2 className="card-title" style={{ margin: 0 }}>Ledger</h2>
+                <div className="ledger-date-row">
+                  <label className="ledger-date-label">From</label>
+                  <input
+                    type="date"
+                    value={ledgerFrom}
+                    onChange={(e) => setLedgerFrom(e.target.value)}
+                    className="input-sm"
+                  />
+                  <label className="ledger-date-label">To</label>
+                  <input
+                    type="date"
+                    value={ledgerTo}
+                    onChange={(e) => setLedgerTo(e.target.value)}
+                    className="input-sm"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={ledgerRefetch}
+                    disabled={ledgerLoading}
+                  >
+                    {ledgerLoading ? 'Loading...' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              {ledgerSummary && (
+                <div className="ledger-summary-row">
+                  <div className="ledger-summary-card ledger-summary-card--credit">
+                    <span className="ledger-summary-label">Total Credit</span>
+                    <span className="ledger-summary-value">{formatReportAmount(ledgerSummary.total_credit)}</span>
+                  </div>
+                  <div className="ledger-summary-card ledger-summary-card--debit">
+                    <span className="ledger-summary-label">Total Debit</span>
+                    <span className="ledger-summary-value">{formatReportAmount(ledgerSummary.total_debit)}</span>
+                  </div>
+                  <div className="ledger-summary-card ledger-summary-card--balance">
+                    <span className="ledger-summary-label">Closing Balance</span>
+                    <span className="ledger-summary-value">{formatReportAmount(ledgerSummary.closing_balance)}</span>
+                  </div>
+                </div>
+              )}
+
+              {ledgerLoading && (
+                <p className="report-placeholder text-muted" style={{ marginTop: '1rem' }}>Loading ledger...</p>
+              )}
+
+              {!ledgerLoading && ledgerRows.length === 0 && (
+                <p className="report-placeholder text-muted" style={{ marginTop: '1rem' }}>
+                  No entries found for selected date range.
+                </p>
+              )}
+
+              {ledgerRows.length > 0 && (
+                <div className="ledger-table-wrap">
+                  <table className="ledger-table">
+                    <thead>
+                      <tr>
+                        <th>DATE</th>
+                        <th>DESCRIPTION</th>
+                        <th>TYPE</th>
+                        <th>REF NO.</th>
+                        <th className="text-right">DEBIT (₹)</th>
+                        <th className="text-right">CREDIT (₹)</th>
+                        <th className="text-right">BALANCE (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ledgerRows.map((row, i) => {
+                        const balance = Number(row.balance ?? 0)
+                        return (
+                          <tr key={`${row.ref_id}-${i}`}>
+                            <td className="ledger-date">
+                              {row.date
+                                ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                                : '—'}
+                            </td>
+                            <td className="ledger-particulars">
+                              {row.description ? (
+                                <span className="ledger-party">{row.description}</span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`ledger-type-badge ledger-type-badge--${(row.type ?? '').toLowerCase()}`}>
+                                {row.type ?? '—'}
+                              </span>
+                            </td>
+                            <td className="text-muted">
+                              {row.ref_no && row.ref_no !== '0' && row.ref_no !== null ? row.ref_no : '—'}
+                            </td>
+                            <td className="text-right ledger-debit">
+                              {Number(row.debit) > 0 ? formatReportAmount(row.debit) : '—'}
+                            </td>
+                            <td className="text-right ledger-credit">
+                              {Number(row.credit) > 0 ? formatReportAmount(row.credit) : '—'}
+                            </td>
+                            <td className="text-right ledger-balance">
+                              {formatReportAmount(balance)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="ledger-totals-row">
+                        <td colSpan={4}><strong>Closing Balance</strong></td>
+                        <td className="text-right"><strong className="ledger-debit">{formatReportAmount(ledgerSummary?.total_debit ?? 0)}</strong></td>
+                        <td className="text-right"><strong className="ledger-credit">{formatReportAmount(ledgerSummary?.total_credit ?? 0)}</strong></td>
+                        <td className="text-right"><strong>{formatReportAmount(ledgerSummary?.closing_balance ?? 0)}</strong></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -39,6 +39,7 @@ export default function Purchase() {
       ...po,
       totalFormatted: typeof amountOrTotal === 'number' ? formatCurrency(amountOrTotal) : (amountOrTotal != null ? String(amountOrTotal) : '—'),
       dateFormatted: formatDate(po.date),
+      p_inv_no: po.p_inv_no ?? '—',
       statusDisplay: (po.status || '').charAt(0).toUpperCase() + (po.status || '').slice(1).toLowerCase(),
       statusClass: (po.status || '').toLowerCase() === 'completed' || (po.status || '').toLowerCase() === 'received' ? 'paid' : (po.status || '').toLowerCase() === 'pending' ? 'pending' : 'overdue',
     }
@@ -106,7 +107,8 @@ export default function Purchase() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>PO #</th>
+                  <th>PO</th>
+                  <th>Invoice</th>
                   <th>Date</th>
                   <th>Vendor</th>
                   <th>Items</th>
@@ -119,6 +121,7 @@ export default function Purchase() {
                 {purchaseOrders.map((po) => (
                   <tr key={po.id}>
                     <td className="font-medium">{po.id}</td>
+                    <td>{po.p_inv_no ?? '—'}</td>
                     <td>{po.dateFormatted}</td>
                     <td>{po.vendor}</td>
                     <td>{po.items ?? '—'}</td>
