@@ -49,6 +49,14 @@ export function exportCurrentReport(ctx) {
     gstRateFrom,
     gstRateTo,
     gstRateRows,
+    ledgerFrom,
+    ledgerTo,
+    ledgerRows,
+    ledgerSummary,
+    expRptFrom,
+    expRptTo,
+    expRptRows,
+    expRptSummary,
   } = ctx
 
   const sheets = []
@@ -64,14 +72,103 @@ export function exportCurrentReport(ctx) {
     })
     baseName = `Sales_Report_${tsFilePart()}`
   } else if (activeReportId === 'purchase') {
+    // Summary sheet
+    if (expRptSummary) {
+      sheets.push({
+        name: 'Summary',
+        rows: [
+          ['Expenses & Purchase Report Summary'],
+          ['Period', `${expRptFrom ?? ''} to ${expRptTo ?? ''}`],
+          [],
+          ['Particulars', 'Amount (₹)'],
+          ['Total Payment', expRptSummary.total_payment ?? 0],
+          ['Total Taxable Amount', expRptSummary.total_taxable_amt ?? 0],
+          ['Total CGST', expRptSummary.total_cgst ?? 0],
+          ['Total SGST', expRptSummary.total_sgst ?? 0],
+          ['Total IGST', expRptSummary.total_igst ?? 0],
+          ['Total GST', expRptSummary.total_gst ?? 0],
+        ],
+      })
+    }
+    // Detail sheet
     sheets.push({
-      name: 'Purchase',
+      name: 'Expenses & Purchases',
       rows: [
-        ['Note'],
-        ['Export purchase register from GST Reports → Purchase register for full GST data.'],
+        ['Period', `${expRptFrom ?? ''} to ${expRptTo ?? ''}`],
+        [],
+        [
+          'Inv No',
+          'Type',
+          'Date',
+          'Party Name',
+          'Item / Description',
+          'Payment (₹)',
+          'Taxable Amt (₹)',
+          'CGST (₹)',
+          'SGST (₹)',
+          'IGST (₹)',
+          'Pay By',
+          'Ref No',
+          'State',
+        ],
+        ...(expRptRows || []).map((row) => [
+          row.inv_no ?? '',
+          row.type ?? '',
+          row.date ?? '',
+          row.party_name ?? '',
+          row.item_name ?? row.description ?? '',
+          row.payment ?? 0,
+          row.taxable_amt ?? 0,
+          row.cgst ?? 0,
+          row.sgst ?? 0,
+          row.igst ?? 0,
+          row.payby ?? '',
+          row.refno ?? '',
+          row.state ?? '',
+        ]),
+        ...(expRptSummary && expRptRows?.length
+          ? [[
+              'TOTAL', '', '', '', '',
+              expRptSummary.total_payment ?? 0,
+              expRptSummary.total_taxable_amt ?? 0,
+              expRptSummary.total_cgst ?? 0,
+              expRptSummary.total_sgst ?? 0,
+              expRptSummary.total_igst ?? 0,
+              '', '', '',
+            ]]
+          : []),
       ],
     })
-    baseName = `Purchase_Report_${tsFilePart()}`
+    baseName = `Expenses_Report_${expRptFrom ?? ''}_${expRptTo ?? ''}`
+  } else if (activeReportId === 'ledger') {
+    sheets.push({
+      name: 'Ledger',
+      rows: [
+        ['Ledger Report'],
+        ['Period', `${ledgerFrom ?? ''} to ${ledgerTo ?? ''}`],
+        [],
+        ['Date', 'Particulars', 'Voucher Type', 'Voucher No', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)'],
+        ...(ledgerRows || []).map((row) => [
+          row.date ?? row.dt ?? '',
+          row.particulars ?? row.narration ?? row.description ?? '',
+          row.voucher_type ?? row.vch_type ?? row.type ?? '',
+          row.voucher_no ?? row.vch_no ?? row.ref_no ?? '',
+          row.debit ?? row.dr ?? 0,
+          row.credit ?? row.cr ?? 0,
+          row.balance ?? row.bal ?? '',
+        ]),
+        ...(ledgerSummary
+          ? [
+              [],
+              ['Summary'],
+              ['Total Debit', ledgerSummary.total_debit ?? ledgerSummary.totalDebit ?? ''],
+              ['Total Credit', ledgerSummary.total_credit ?? ledgerSummary.totalCredit ?? ''],
+              ['Closing Balance', ledgerSummary.closing_balance ?? ledgerSummary.closingBalance ?? ''],
+            ]
+          : []),
+      ],
+    })
+    baseName = `Ledger_${ledgerFrom ?? ''}_${ledgerTo ?? ''}`
   } else if (activeReportId === 'gst' && activeGstSub === 'gstr1') {
     sheets.push({
       name: 'GSTR-1 Outward',

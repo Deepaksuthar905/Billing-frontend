@@ -594,6 +594,72 @@
   text-align: right !important;
 }
 
+/* ── Expense Report ── */
+.exp-report {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.exp-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.exp-summary-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.exp-summary-card--total {
+  border-color: var(--primary, #6366f1);
+  background: var(--primary-light, #eef2ff);
+}
+
+.exp-summary-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  font-weight: 500;
+}
+
+.exp-summary-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+}
+
+.exp-summary-card--total .exp-summary-value {
+  color: var(--primary, #6366f1);
+}
+
+.table-total-row td {
+  background: var(--bg-surface, #f9fafb);
+  border-top: 2px solid var(--border, #e5e7eb);
+  font-weight: 600;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+
+.report-date-range-label {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--text-muted, #6b7280);
+  margin-left: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .exp-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .ledger-toolbar {
     flex-direction: column;

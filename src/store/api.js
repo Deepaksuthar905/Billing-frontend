@@ -191,6 +191,14 @@ export const billingApi = createApi({
       invalidatesTags: (_r, _e, { id }) => [{ type: 'Item', id }, 'Item', 'Dashboard'],
     }),
 
+    // Expense + Purchase combined report
+    getExpenseReport: builder.query({
+      query: ({ from, to }) => ({
+        url: `/expensereport?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        method: 'POST',
+      }),
+    }),
+
     // Ledger
     getLedger: builder.query({
       query: ({ from, to }) => ({
@@ -267,4 +275,5 @@ export const {
   useGetExpensesQuery,
   useCreateExpenseMutation,
   useDeleteExpenseMutation,
+  useGetExpenseReportQuery,
 } = billingApi

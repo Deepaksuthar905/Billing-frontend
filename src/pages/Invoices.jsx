@@ -1,17 +1,18 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Eye, Edit, RefreshCw, Trash2 } from 'lucide-react'
+import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Invoices.css'
 
 export default function Invoices() {
-  const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
+  const [invNoFilter, setInvNoFilter] = useState('')
+  const [sortOrder, setSortOrder] = useState('desc')
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
 
@@ -19,7 +20,6 @@ export default function Invoices() {
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
     {
-      search: search || undefined,
       status: status || undefined,
       from: filterFrom || undefined,
       to: filterTo || undefined,
@@ -27,14 +27,28 @@ export default function Invoices() {
     { refetchOnMountOrArgChange: 120 }
   )
 
-  const invoices = (isError || !data?.data ? [] : data.data).map((inv) => ({
-    ...inv,
-    amountFormatted: typeof inv.payment === 'number' ? formatCurrency(inv.payment) : (inv.amount != null ? formatCurrency(inv.amount) : '—'),
-    dateFormatted: formatDate(inv.dt ?? inv.date),
-    customerName: inv.customer ?? inv.customer_name ?? inv.partyname ?? '—',
-    statusDisplay: (inv.status || '').charAt(0).toUpperCase() + (inv.status || '').slice(1).toLowerCase() || '—',
-    statusClass: (inv.status || '').toLowerCase() === 'paid' ? 'paid' : (inv.status || '').toLowerCase() === 'pending' ? 'pending' : 'overdue',
-  }))
+  const invoices = (isError || !data?.data ? [] : data.data)
+    .map((inv) => ({
+      ...inv,
+      rawDate: new Date(inv.dt ?? inv.date ?? 0),
+      invNoStr: String(inv.inv_no ?? inv.invoice_no ?? inv.id ?? ''),
+      amountFormatted: typeof inv.payment === 'number' ? formatCurrency(inv.payment) : (inv.amount != null ? formatCurrency(inv.amount) : '—'),
+      dateFormatted: formatDate(inv.dt ?? inv.date),
+      customerName: inv.customer ?? inv.customer_name ?? inv.partyname ?? '—',
+      statusDisplay: (inv.status || '').charAt(0).toUpperCase() + (inv.status || '').slice(1).toLowerCase() || '—',
+      statusClass: (inv.status || '').toLowerCase() === 'paid' ? 'paid' : (inv.status || '').toLowerCase() === 'pending' ? 'pending' : 'overdue',
+    }))
+    .filter((inv) => {
+      if (invNoFilter && !inv.invNoStr.toLowerCase().includes(invNoFilter.toLowerCase())) return false
+      if (filterFrom && inv.rawDate < new Date(filterFrom)) return false
+      if (filterTo && inv.rawDate > new Date(filterTo + 'T23:59:59')) return false
+      return true
+    })
+    .sort((a, b) =>
+      sortOrder === 'asc'
+        ? a.rawDate - b.rawDate
+        : b.rawDate - a.rawDate
+    )
 
   const handleSync = async () => {
     const from = dateFrom || new Date().toISOString().slice(0, 10)
@@ -92,17 +106,17 @@ export default function Invoices() {
       </div>
 
       <div className="card">
+        {/* Row 1: Sort + Status */}
         <div className="filters-row">
-          <div className="search-box">
-            <Search size={18} className="search-icon" />
-            <input
-              type="search"
-              placeholder="Search by invoice #, customer..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="search-input"
-            />
-          </div>
+          <button
+            type="button"
+            className={`sort-btn${sortOrder === 'asc' ? ' sort-btn--active' : ''}`}
+            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            title={sortOrder === 'asc' ? 'Date: Oldest first' : 'Date: Newest first'}
+          >
+            {sortOrder === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+            <span>{sortOrder === 'asc' ? 'ASC' : 'DESC'}</span>
+          </button>
 
           <select
             value={status}
@@ -114,7 +128,26 @@ export default function Invoices() {
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>
           </select>
-          <div className="inv-date-filter">
+        </div>
+
+        {/* Row 2: Invoice # filter + Date range filter */}
+        <div className="filters-row filters-row--secondary">
+          <div className="filter-field">
+            <Hash size={15} className="filter-field-icon" />
+            <input
+              type="search"
+              placeholder="Filter by Invoice #"
+              value={invNoFilter}
+              onChange={(e) => setInvNoFilter(e.target.value)}
+              className="search-input search-input--sm"
+            />
+            {invNoFilter && (
+              <button type="button" className="btn-clear-filter" onClick={() => setInvNoFilter('')} title="Clear">✕</button>
+            )}
+          </div>
+
+          <div className="filter-field filter-field--date">
+            <Calendar size={15} className="filter-field-icon" />
             <input
               type="date"
               value={filterFrom}

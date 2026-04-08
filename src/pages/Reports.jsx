@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BarChart3, TrendingUp, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
-import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery, useGetLedgerQuery } from '../store/api'
+import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery, useGetLedgerQuery, useGetExpenseReportQuery } from '../store/api'
 import { exportCurrentReport } from '../utils/reportExcelExport'
 import './Reports.css'
 
@@ -69,7 +69,7 @@ function buildGstRateRows(data) {
 
 const reportCategories = [
   { id: 'sales', title: 'Sales Report', desc: 'Day-wise, item-wise sales summary', icon: TrendingUp },
-  { id: 'purchase', title: 'Purchase Report', desc: 'Purchase orders and vendor summary', icon: BarChart3 },
+  { id: 'purchase', title: 'Expenses Report', desc: 'Purchase orders and vendor summary', icon: BarChart3 },
   { id: 'gst', title: 'GST Reports', desc: 'GSTR-1, 3B, purchase register, rate-wise tax', icon: FileText },
   { id: 'profit', title: 'Profit & Loss', desc: 'Revenue, expenses and profit', icon: BarChart3 },
   { id: 'inventory', title: 'Stock Summary', desc: 'Current stock and valuation', icon: BarChart3 },
@@ -208,6 +208,8 @@ export default function Reports() {
   const [purchaseRegTo, setPurchaseRegTo] = useState(() => defaultPurchaseRegTo())
   const [ledgerFrom, setLedgerFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10))
   const [ledgerTo, setLedgerTo] = useState(new Date().toISOString().slice(0, 10))
+  const [expRptFrom, setExpRptFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10))
+  const [expRptTo, setExpRptTo] = useState(new Date().toISOString().slice(0, 10))
 
   const { data: invoicesData, isLoading: gstr1Loading } = useGetInvoicesQuery(
     { from: gstr1From, to: gstr1To },
@@ -341,6 +343,13 @@ export default function Reports() {
   const ledgerRows = ledgerData?.entries ?? []
   const ledgerSummary = ledgerData?.summary ?? null
 
+  const { data: expRptData, isLoading: expRptLoading } = useGetExpenseReportQuery(
+    { from: expRptFrom, to: expRptTo },
+    { skip: activeReportId !== 'purchase', refetchOnMountOrArgChange: true }
+  )
+  const expRptRows = expRptData?.data ?? []
+  const expRptSummary = expRptData?.summary ?? null
+
   const gstRateRows = buildGstRateRows(gstRateData?.data)
 
   const activeReport = reportCategories.find((c) => c.id === activeReportId) || reportCategories[0]
@@ -373,6 +382,14 @@ export default function Reports() {
       gstRateFrom,
       gstRateTo,
       gstRateRows,
+      ledgerFrom,
+      ledgerTo,
+      ledgerRows,
+      ledgerSummary,
+      expRptFrom,
+      expRptTo,
+      expRptRows,
+      expRptSummary,
     })
   }
 
@@ -461,13 +478,125 @@ export default function Reports() {
           )}
 
           {activeReportId === 'purchase' && (
-            <div className="card">
-              <h2 className="card-title">Purchase Report</h2>
-              <p className="report-placeholder">{activeReport.desc}</p>
-              <p className="report-placeholder text-muted">Purchase orders and vendor summary will appear here.</p>
-              <p className="report-placeholder text-muted">
-                GST / ITC detail ke liye sidebar se <strong>GST Reports → Purchase register</strong> kholen.
-              </p>
+            <div className="exp-report">
+              {/* Toolbar */}
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input type="date" value={expRptFrom} onChange={(e) => setExpRptFrom(e.target.value)} className="form-input" />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input type="date" value={expRptTo} onChange={(e) => setExpRptTo(e.target.value)} className="form-input" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              {expRptSummary && (
+                <div className="exp-summary-grid">
+                  <div className="exp-summary-card">
+                    <span className="exp-summary-label">Total Payment</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_payment)}</span>
+                  </div>
+                  <div className="exp-summary-card">
+                    <span className="exp-summary-label">Taxable Amount</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_taxable_amt)}</span>
+                  </div>
+                  <div className="exp-summary-card">
+                    <span className="exp-summary-label">CGST</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_cgst)}</span>
+                  </div>
+                  <div className="exp-summary-card">
+                    <span className="exp-summary-label">SGST</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_sgst)}</span>
+                  </div>
+                  <div className="exp-summary-card">
+                    <span className="exp-summary-label">IGST</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_igst)}</span>
+                  </div>
+                  <div className="exp-summary-card exp-summary-card--total">
+                    <span className="exp-summary-label">Total GST</span>
+                    <span className="exp-summary-value">{formatReportAmount(expRptSummary.total_gst)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              <div className="card" style={{ marginTop: '1rem' }}>
+                <h2 className="card-title">
+                  Expenses &amp; Purchase Records
+                  {expRptFrom && expRptTo && (
+                    <span className="report-date-range-label">{expRptFrom} — {expRptTo}</span>
+                  )}
+                </h2>
+
+                {expRptLoading && <div className="page-loading">Loading...</div>}
+
+                {!expRptLoading && (
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Inv No</th>
+                          <th>Type</th>
+                          <th>Date</th>
+                          <th>Party</th>
+                          <th>Item / Description</th>
+                          <th className="text-right">Payment</th>
+                          <th className="text-right">Taxable</th>
+                          <th className="text-right">CGST</th>
+                          <th className="text-right">SGST</th>
+                          <th className="text-right">IGST</th>
+                          <th>Pay By</th>
+                          <th>Ref No</th>
+                          <th>State</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expRptRows.length === 0 && (
+                          <tr>
+                            <td colSpan={13} className="text-center text-muted">No records found for selected date range.</td>
+                          </tr>
+                        )}
+                        {expRptRows.map((row, idx) => (
+                          <tr key={`${row.type}-${row.id}-${idx}`}>
+                            <td className="font-medium">{row.inv_no ?? '—'}</td>
+                            <td>
+                              <span className={`badge badge--${row.type === 'purchase' ? 'pending' : 'paid'}`}>
+                                {row.type === 'purchase' ? 'Purchase' : 'Expense'}
+                              </span>
+                            </td>
+                            <td>{row.date ?? '—'}</td>
+                            <td>{row.party_name ?? '—'}</td>
+                            <td>{row.item_name ?? row.description ?? '—'}</td>
+                            <td className="text-right">{formatReportAmount(row.payment)}</td>
+                            <td className="text-right">{formatReportAmount(row.taxable_amt)}</td>
+                            <td className="text-right">{formatReportAmount(row.cgst)}</td>
+                            <td className="text-right">{formatReportAmount(row.sgst)}</td>
+                            <td className="text-right">{formatReportAmount(row.igst)}</td>
+                            <td>{row.payby ?? '—'}</td>
+                            <td>{row.refno ?? '—'}</td>
+                            <td>{row.state ?? '—'}</td>
+                          </tr>
+                        ))}
+                        {expRptRows.length > 0 && expRptSummary && (
+                          <tr className="table-total-row">
+                            <td colSpan={5} className="font-medium">Total</td>
+                            <td className="text-right font-medium">{formatReportAmount(expRptSummary.total_payment)}</td>
+                            <td className="text-right font-medium">{formatReportAmount(expRptSummary.total_taxable_amt)}</td>
+                            <td className="text-right font-medium">{formatReportAmount(expRptSummary.total_cgst)}</td>
+                            <td className="text-right font-medium">{formatReportAmount(expRptSummary.total_sgst)}</td>
+                            <td className="text-right font-medium">{formatReportAmount(expRptSummary.total_igst)}</td>
+                            <td colSpan={3}></td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
