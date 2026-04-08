@@ -1,0 +1,376 @@
+/* ── Modal Overlay ── */
+.inv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 1rem;
+  overflow-y: auto;
+  z-index: 1100;
+}
+
+/* ── Action Bar ── */
+.inv-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+}
+
+.inv-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.inv-action-btn--pdf {
+  background: #6366f1;
+  color: #fff;
+}
+.inv-action-btn--pdf:hover { background: #4f46e5; }
+
+.inv-action-btn--close {
+  background: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+.inv-action-btn--close:hover { background: #f3f4f6; }
+
+/* ── Invoice Sheet ── */
+.inv-modal-sheet {
+  background: #fff;
+  width: 100%;
+  max-width: 820px;
+  border-radius: 4px;
+  padding: 2rem 2.5rem;
+  font-size: 0.8rem;
+  color: #1a1a1a;
+  font-family: Arial, sans-serif;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+}
+
+.inv-loading {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+/* ── Header ── */
+.inv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+  gap: 1rem;
+}
+
+.inv-company-block {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inv-logo-wrap {
+  flex-shrink: 0;
+}
+
+.inv-logo-placeholder {
+  width: 56px;
+  height: 56px;
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.inv-logo-img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.inv-company-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  line-height: 1.2;
+}
+
+.inv-company-addr {
+  font-size: 0.72rem;
+  color: #4b5563;
+  margin-top: 2px;
+  max-width: 280px;
+}
+
+.inv-company-meta {
+  font-size: 0.72rem;
+  color: #374151;
+  margin-top: 2px;
+}
+
+.inv-company-right {
+  text-align: right;
+  font-size: 0.72rem;
+  color: #374151;
+  line-height: 1.7;
+}
+
+.inv-meta-label {
+  color: #6b7280;
+}
+
+/* ── Title Bar ── */
+.inv-title-bar {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  border-top: 1.5px solid #1a1a1a;
+  border-bottom: 1.5px solid #1a1a1a;
+  padding: 0.3rem 0;
+  margin: 0.6rem 0;
+  letter-spacing: 0.5px;
+}
+
+/* ── Parties Row ── */
+.inv-parties-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #d1d5db;
+  margin-bottom: 0.6rem;
+}
+
+.inv-bill-to {
+  padding: 0.6rem 0.75rem;
+  border-right: 1px solid #d1d5db;
+}
+
+.inv-details-box {
+  padding: 0.6rem 0.75rem;
+}
+
+.inv-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #374151;
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.3px;
+}
+
+.inv-party-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+
+.inv-party-detail {
+  font-size: 0.75rem;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.inv-details-table {
+  font-size: 0.775rem;
+  border-collapse: collapse;
+  width: 100%;
+}
+.inv-details-table td:first-child {
+  color: #6b7280;
+  padding-right: 0.5rem;
+  white-space: nowrap;
+}
+.inv-details-table td { padding: 0.1rem 0; }
+
+/* ── Items Table ── */
+.inv-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.775rem;
+  margin-bottom: 0;
+}
+
+.inv-items-table th,
+.inv-items-table td {
+  border: 1px solid #d1d5db;
+  padding: 0.4rem 0.5rem;
+}
+
+.inv-items-table thead th {
+  background: #f3f4f6;
+  font-weight: 700;
+  text-align: center;
+  font-size: 0.72rem;
+}
+
+.inv-col-sno  { width: 28px; }
+.inv-col-hsn  { width: 80px; }
+.inv-col-qty  { width: 60px; }
+.inv-col-price{ width: 100px; }
+.inv-col-gst  { width: 100px; }
+.inv-col-amt  { width: 100px; }
+
+.inv-item-name { font-weight: 600; }
+.inv-item-desc { font-size: 0.68rem; color: #6b7280; margin-top: 1px; }
+
+.inv-items-total td {
+  background: #f9fafb;
+  font-size: 0.775rem;
+}
+
+.text-center { text-align: center !important; }
+.text-right  { text-align: right  !important; }
+
+/* ── Bottom: Tax Summary + Totals ── */
+.inv-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  border: 1px solid #d1d5db;
+  border-top: none;
+  margin-bottom: 0.6rem;
+}
+
+.inv-tax-summary {
+  padding: 0.6rem 0.75rem;
+  border-right: 1px solid #d1d5db;
+}
+
+.inv-tax-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  margin-top: 0.35rem;
+}
+
+.inv-tax-table th,
+.inv-tax-table td {
+  border: 1px solid #d1d5db;
+  padding: 0.3rem 0.4rem;
+}
+
+.inv-tax-table thead th {
+  background: #f3f4f6;
+  font-weight: 700;
+  text-align: center;
+}
+
+.inv-tax-total td {
+  background: #f9fafb;
+}
+
+/* ── Totals Box ── */
+.inv-totals-box {
+  min-width: 200px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.775rem;
+}
+
+.inv-totals-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px dotted #e5e7eb;
+}
+
+.inv-totals-row--total {
+  font-weight: 700;
+  font-size: 0.85rem;
+  border-top: 1.5px solid #1a1a1a;
+  border-bottom: 1.5px solid #1a1a1a;
+  padding: 0.25rem 0;
+  margin: 0.15rem 0;
+}
+
+.inv-totals-words {
+  font-size: 0.7rem;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  padding: 0.3rem 0.4rem;
+  margin: 0.15rem 0;
+}
+
+.inv-totals-words-label {
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.inv-totals-words-val {
+  color: #374151;
+  font-style: italic;
+}
+
+/* ── Footer: Terms + Bank + Signature ── */
+.inv-footer-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  border: 1px solid #d1d5db;
+  gap: 0;
+}
+
+.inv-footer-left {
+  padding: 0.6rem 0.75rem;
+  border-right: 1px solid #d1d5db;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inv-terms-text {
+  font-size: 0.72rem;
+  color: #4b5563;
+}
+
+.inv-bank {
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.inv-signature {
+  min-width: 180px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.inv-sig-space {
+  flex: 1;
+  min-height: 60px;
+}
+
+.inv-sig-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.inv-sig-proprietor {
+  font-weight: 400;
+  color: #6b7280;
+}
+
+@media print {
+  .no-print { display: none !important; }
+}

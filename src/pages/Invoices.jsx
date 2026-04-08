@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
+import InvoicePreviewModal from './InvoicePreviewModal'
 import './Invoices.css'
 
 export default function Invoices() {
@@ -15,6 +16,7 @@ export default function Invoices() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const [previewInvId, setPreviewInvId] = useState(null)
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
 
@@ -211,9 +213,14 @@ export default function Invoices() {
                   </td>
                   <td>
                     <div className="action-btns">
-                      <Link to={`/invoices/${inv.id}`} className="btn-icon" aria-label="View">
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        aria-label="View"
+                        onClick={() => setPreviewInvId(inv.id)}
+                      >
                         <Eye size={16} />
-                      </Link>
+                      </button>
                       <button type="button" className="btn-icon" aria-label="Edit">
                         <Edit size={16} />
                       </button>
@@ -273,6 +280,12 @@ export default function Invoices() {
             </div>
           </div>
         </div>
+      )}
+      {previewInvId && (
+        <InvoicePreviewModal
+          invId={previewInvId}
+          onClose={() => setPreviewInvId(null)}
+        />
       )}
     </div>
   )
