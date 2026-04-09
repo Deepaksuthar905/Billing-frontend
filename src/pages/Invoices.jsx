@@ -221,9 +221,9 @@ export default function Invoices() {
                       >
                         <Eye size={16} />
                       </button>
-                      <button type="button" className="btn-icon" aria-label="Edit">
+                      <Link to={`/invoices/${inv.id}/edit`} className="btn-icon" aria-label="Edit">
                         <Edit size={16} />
-                      </button>
+                      </Link>
                       <button
                         type="button"
                         className="btn-icon btn-icon--danger"

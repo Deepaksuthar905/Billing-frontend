@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { X, Plus, Calculator, Settings } from 'lucide-react'
-import { useGetCustomersQuery, useGetItemsQuery, useCreateInvoiceMutation, useCreateCustomerMutation } from '../store/api'
+import {
+  useGetCustomersQuery,
+  useGetItemsQuery,
+  useCreateInvoiceMutation,
+  useUpdateInvoiceMutation,
+  useCreateCustomerMutation,
+  useGetInvoiceByIdQuery,
+} from '../store/api'
 import { formatCurrency } from '../utils/format'
 import './InvoiceNew.css'
 
@@ -30,8 +37,72 @@ const emptyLineItem = () => ({
   amount: 0,
 })
 
+function mapApiItemToLine(line) {
+  return {
+    itemId: line.item_id != null && line.item_id !== '' ? String(line.item_id) : '',
+    item: line.item ?? line.item_name ?? '',
+    hsnCode: String(line.hsn_code ?? line.hsncode ?? ''),
+    description: line.description ?? '',
+    qty: Number(line.qty) || 1,
+    unit: line.unit ?? 'NONE',
+    price: Number(line.price) || 0,
+    discountPct: Number(line.discount_pct) || 0,
+    discountAmt: Number(line.discount_amt) || 0,
+    taxPct: Number(line.tax_pct ?? line.gst) || IGST_RATE,
+    taxAmt: Number(line.tax_amt) || 0,
+    amount: Number(line.amount) || 0,
+  }
+}
+
+/** When API returns `items: []` but header has amount/taxes — build one editable line. */
+function buildSyntheticLineFromInvoice(inv) {
+  const amt = Number(inv.amount ?? inv.payment ?? inv.paynow ?? 0)
+  const cgst = Number(inv.cgst) || 0
+  const sgst = Number(inv.sgst) || 0
+  const igst = Number(inv.igst) || 0
+  const taxAmt = round2(cgst + sgst + igst)
+  let taxable = Number(inv.taxable_amt)
+  if (!Number.isFinite(taxable) || taxable < 0) taxable = 0
+  if (taxable === 0 && amt > 0) {
+    if (taxAmt === 0) taxable = amt
+    else taxable = Math.max(0, round2(amt - taxAmt))
+  }
+  const qty = 1
+  const taxPctGuess =
+    taxable > 0 && taxAmt > 0 ? round2((taxAmt / taxable) * 100) : Number(inv.gst) || 0
+  return {
+    itemId: '',
+    item: inv.item_name ?? inv.description ?? 'Sales',
+    hsnCode: '998319',
+    description: '',
+    qty,
+    unit: 'NONE',
+    price: taxable > 0 ? round2(taxable / qty) : amt,
+    discountPct: 0,
+    discountAmt: 0,
+    taxPct: taxPctGuess,
+    taxAmt,
+    amount: amt,
+  }
+}
+
+function resolveCustomerName(inv, customersList) {
+  const direct = String(inv.customer ?? inv.customer_name ?? inv.partyname ?? '').trim()
+  if (direct) return direct
+  const pid = inv.pid ?? inv.customer_id ?? inv.party_id
+  if (pid == null || !customersList?.length) return ''
+  const c = customersList.find((x) => String(x.pid ?? x.id) === String(pid))
+  return String(c?.partyname ?? c?.name ?? '').trim()
+}
+
 export default function InvoiceNew() {
   const navigate = useNavigate()
+  const { id: editId } = useParams()
+  const isEdit = Boolean(editId)
+  const hydratedRef = useRef(false)
+  const skipCustomerSyncRef = useRef(false)
+  /** Skip one run of state→GST line recalc right after hydrate (otherwise lines reset to 0). */
+  const skipStateSupplyTaxEffectRef = useRef(false)
   const [invoiceType, setInvoiceType] = useState('sale') // sale | purchase
   const [credit, setCredit] = useState(false)
   const [customerInput, setCustomerInput] = useState('')
@@ -50,8 +121,15 @@ export default function InvoiceNew() {
   const customers = customersData?.data ?? []
   const { data: itemsData } = useGetItemsQuery(undefined, { skip: false })
   const items = itemsData?.data ?? []
-  const [createInvoice, { isLoading: isSaving }] = useCreateInvoiceMutation()
+  const [createInvoice, { isLoading: isCreating }] = useCreateInvoiceMutation()
+  const [updateInvoice, { isLoading: isUpdating }] = useUpdateInvoiceMutation()
   const [createCustomer, { isLoading: isCreatingCustomer }] = useCreateCustomerMutation()
+  const { data: invoiceRaw, isLoading: invoiceLoading, isError: invoiceError } = useGetInvoiceByIdQuery(
+    editId,
+    { skip: !isEdit }
+  )
+
+  const isSaving = isCreating || isUpdating
 
   const selectedCustomer = customers.find(
     (c) => (c.partyname || c.name || '').trim().toLowerCase() === customerInput.trim().toLowerCase()
@@ -60,6 +138,10 @@ export default function InvoiceNew() {
 
   useEffect(() => {
     if (!selectedCustomer) return
+    if (skipCustomerSyncRef.current) {
+      skipCustomerSyncRef.current = false
+      return
+    }
     if (selectedCustomer.state) setStateOfSupply(selectedCustomer.state)
     setBillingName(
       (selectedCustomer.billing_name && String(selectedCustomer.billing_name).trim()) ||
@@ -72,6 +154,77 @@ export default function InvoiceNew() {
       ''
     )
   }, [selectedCustomer?.pid, selectedCustomer?.partyname])
+
+  useEffect(() => {
+    hydratedRef.current = false
+  }, [editId])
+
+  useEffect(() => {
+    if (!isEdit || !editId) return
+    const inv = invoiceRaw?.data ?? invoiceRaw
+    if (!inv || typeof inv !== 'object' || Object.keys(inv).length === 0) return
+    if (hydratedRef.current) return
+
+    hydratedRef.current = true
+    skipCustomerSyncRef.current = true
+    skipStateSupplyTaxEffectRef.current = true
+
+    setCustomerInput(resolveCustomerName(inv, customers))
+    setBillingName(
+      String(inv.billing_name ?? '').trim() ||
+        resolveCustomerName(inv, customers) ||
+        String(inv.customer ?? '').trim()
+    )
+    setBillingAddress(String(inv.addr ?? inv.billing_address ?? inv.address ?? '').trim())
+    setInvoiceNumber(String(inv.inv_no ?? inv.invoice_no ?? ''))
+    const dt = inv.dt ?? inv.date
+    if (dt) setInvoiceDate(String(dt).slice(0, 10))
+    setStateOfSupply(String(inv.state ?? inv.place_of_supply ?? inv.state_of_supply ?? '').trim())
+    setRefno(String(inv.refno ?? '').trim())
+    setCredit(inv.paytype === 1 || inv.paytype === '1' || inv.credit === true || inv.credit === 1)
+
+    const rawItems = Array.isArray(inv.items) ? inv.items : Array.isArray(inv.line_items) ? inv.line_items : []
+    if (rawItems.length > 0) {
+      const mapped = rawItems.map(mapApiItemToLine)
+      const sumLines = mapped.reduce((s, l) => s + (Number(l.amount) || 0), 0)
+      const pay = Number(inv.payment ?? inv.amount ?? inv.paynow) || 0
+      const diff = round2(pay - sumLines)
+      setLineItems(mapped)
+      if (Math.abs(diff) > 0.001) {
+        setRoundOff(true)
+        setRoundOffValue(diff)
+      } else {
+        setRoundOff(false)
+        setRoundOffValue(0)
+      }
+    } else if (Number(inv.amount ?? inv.payment ?? 0) > 0) {
+      const mapped = [buildSyntheticLineFromInvoice(inv)]
+      const sumLines = mapped.reduce((s, l) => s + (Number(l.amount) || 0), 0)
+      const pay = Number(inv.payment ?? inv.amount ?? inv.paynow) || 0
+      const diff = round2(pay - sumLines)
+      setLineItems(mapped)
+      if (Math.abs(diff) > 0.001) {
+        setRoundOff(true)
+        setRoundOffValue(diff)
+      } else {
+        setRoundOff(false)
+        setRoundOffValue(0)
+      }
+    } else {
+      setLineItems([emptyLineItem()])
+    }
+  }, [isEdit, editId, invoiceRaw])
+
+  /** API often sends `customer: ""` and `pid` only — fill name when customers list loads. */
+  useEffect(() => {
+    if (!isEdit || !invoiceRaw || !customers.length) return
+    const inv = invoiceRaw?.data ?? invoiceRaw
+    if (!inv) return
+    const name = resolveCustomerName(inv, customers)
+    if (!name) return
+    setCustomerInput((prev) => (prev.trim() ? prev : name))
+    setBillingName((prev) => (prev.trim() ? prev : name))
+  }, [isEdit, invoiceRaw, customers])
 
   const recalcLineAmount = (line, type) => {
     const qty = Number(line.qty) || 0
@@ -93,6 +246,10 @@ export default function InvoiceNew() {
 
   useEffect(() => {
     if (!stateOfSupply || !stateOfSupply.trim()) return
+    if (skipStateSupplyTaxEffectRef.current) {
+      skipStateSupplyTaxEffectRef.current = false
+      return
+    }
     const rate = IGST_RATE
     setLineItems((prev) =>
       prev.map((line) => {
@@ -216,19 +373,46 @@ export default function InvoiceNew() {
       })),
     }
     try {
-      await createInvoice(payload).unwrap()
+      if (isEdit && editId) {
+        await updateInvoice({ id: editId, ...payload }).unwrap()
+      } else {
+        await createInvoice(payload).unwrap()
+      }
       navigate('/invoices')
     } catch (err) {
-      console.error('Create invoice failed:', err)
-      alert(err?.data?.message || err?.data?.detail || 'Could not save invoice.')
+      console.error(isEdit ? 'Update invoice failed:' : 'Create invoice failed:', err)
+      alert(err?.data?.message || err?.data?.detail || (isEdit ? 'Could not update invoice.' : 'Could not save invoice.'))
     }
+  }
+
+  if (isEdit && invoiceLoading && !invoiceRaw) {
+    return (
+      <div className="invoice-new-page">
+        <div className="page-loading" style={{ padding: '3rem', textAlign: 'center' }}>
+          Loading invoice…
+        </div>
+      </div>
+    )
+  }
+
+  if (isEdit && invoiceError) {
+    return (
+      <div className="invoice-new-page">
+        <div className="page-loading" style={{ padding: '3rem', textAlign: 'center' }}>
+          <p>Could not load this invoice.</p>
+          <Link to="/invoices" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
+            Back to invoices
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="invoice-new-page">
       <header className="invoice-new-header">
         <div className="invoice-new-header-left">
-          <span className="invoice-new-title">Sale #1</span>
+          <span className="invoice-new-title">{isEdit ? `Edit invoice #${invoiceNumber || editId}` : 'New sale'}</span>
           <Link to="/invoices" className="icon-btn" aria-label="Close">
             <X size={20} />
           </Link>
@@ -498,7 +682,15 @@ export default function InvoiceNew() {
             Share
           </button>
           <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving || isCreatingCustomer}>
-            {isSaving ? 'Saving...' : isCreatingCustomer ? 'Creating customer...' : 'Save'}
+            {isSaving
+              ? isEdit
+                ? 'Updating...'
+                : 'Saving...'
+              : isCreatingCustomer
+                ? 'Creating customer...'
+                : isEdit
+                  ? 'Update'
+                  : 'Save'}
           </button>
         </div>
       </div>

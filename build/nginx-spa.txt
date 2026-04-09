@@ -1,0 +1,4 @@
+# Nginx: /htsuperbilling/ ke andar SPA — refresh par 404 na aaye (optional; ab app HashRouter use karti hai)
+location /htsuperbilling/ {
+  try_files $uri $uri/ /htsuperbilling/index.html;
+}

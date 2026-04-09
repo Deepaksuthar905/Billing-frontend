@@ -23,6 +23,7 @@ function App() {
         <Route path="customers" element={<Customers />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceNew />} />
+        <Route path="invoices/:id/edit" element={<InvoiceNew />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="expenses/new" element={<ExpenseNew />} />
         <Route path="reports" element={<Reports />} />
