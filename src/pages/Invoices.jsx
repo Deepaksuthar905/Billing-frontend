@@ -6,6 +6,17 @@ import { formatCurrency, formatDate } from '../utils/format'
 import InvoicePreviewModal from './InvoicePreviewModal'
 import './Invoices.css'
 
+/** From–to ke beech max 31 din (inclusive); isse zyada range allow nahi. */
+function exceedsOneMonthRange(fromStr, toStr) {
+  if (!fromStr || !toStr) return false
+  const a = new Date(`${fromStr}T12:00:00`)
+  const b = new Date(`${toStr}T12:00:00`)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return true
+  if (a > b) return true
+  const diffDays = Math.floor((b - a) / (24 * 60 * 60 * 1000))
+  return diffDays > 30
+}
+
 export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -20,11 +31,14 @@ export default function Invoices() {
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
 
+  const rangeOkForApi =
+    !filterFrom || !filterTo || !exceedsOneMonthRange(filterFrom, filterTo)
+
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
     {
       status: status || undefined,
-      from: filterFrom || undefined,
-      to: filterTo || undefined,
+      from: rangeOkForApi && filterFrom ? filterFrom : undefined,
+      to: rangeOkForApi && filterTo ? filterTo : undefined,
     },
     { refetchOnMountOrArgChange: 120 }
   )
@@ -42,8 +56,8 @@ export default function Invoices() {
     }))
     .filter((inv) => {
       if (invNoFilter && !inv.invNoStr.toLowerCase().includes(invNoFilter.toLowerCase())) return false
-      if (filterFrom && inv.rawDate < new Date(filterFrom)) return false
-      if (filterTo && inv.rawDate > new Date(filterTo + 'T23:59:59')) return false
+      if (rangeOkForApi && filterFrom && inv.rawDate < new Date(filterFrom)) return false
+      if (rangeOkForApi && filterTo && inv.rawDate > new Date(filterTo + 'T23:59:59')) return false
       return true
     })
     .sort((a, b) =>
@@ -153,17 +167,31 @@ export default function Invoices() {
             <input
               type="date"
               value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                setFilterFrom(v)
+                if (v && filterTo && exceedsOneMonthRange(v, filterTo)) {
+                  alert('Max 1 month range to fetch invoices.')
+                  setFilterTo('')
+                }
+              }}
               className="input-sm"
-              title="From date"
+              title="From date (max 1 month with To)"
             />
             <span className="inv-date-sep">—</span>
             <input
               type="date"
               value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                if (filterFrom && v && exceedsOneMonthRange(filterFrom, v)) {
+                  alert('Max 1 month range to fetch invoices.')
+                  return
+                }
+                setFilterTo(v)
+              }}
               className="input-sm"
-              title="To date"
+              title="To date (max 1 month from From)"
             />
             {(filterFrom || filterTo) && (
               <button
