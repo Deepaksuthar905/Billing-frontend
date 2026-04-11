@@ -1,3 +1,55 @@
+.page-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.inv-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.inv-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-surface, #f3f4f6);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.inv-stat--pending {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.inv-stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted, #6b7280);
+}
+
+.inv-stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text, #111827);
+}
+
+.inv-stat--pending .inv-stat-value {
+  color: #b45309;
+}
+
+.inv-summary-note {
+  font-size: 0.75rem;
+  color: var(--text-muted, #9ca3af);
+}
+
 .sync-date-range {
   display: flex;
   align-items: center;

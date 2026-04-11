@@ -17,6 +17,19 @@ function exceedsOneMonthRange(fromStr, toStr) {
   return diffDays > 30
 }
 
+/** Pending / outstanding for one row: balance → paylater → else unpaid status = full amount. */
+function getPendingAmount(inv) {
+  const bal = Number(inv.balance)
+  if (!Number.isNaN(bal) && bal > 0.005) return bal
+  const pl = Number(inv.paylater)
+  if (!Number.isNaN(pl) && pl > 0.005) return pl
+  const st = String(inv.status || '').toLowerCase()
+  if (st === 'pending' || st === 'unpaid' || st === 'overdue') {
+    return Number(inv.payment ?? inv.amount) || 0
+  }
+  return 0
+}
+
 export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -66,6 +79,16 @@ export default function Invoices() {
         : b.rawDate - a.rawDate
     )
 
+  const { sumTotal, sumPending } = invoices.reduce(
+    (acc, inv) => {
+      const amt = Number(inv.payment ?? inv.amount) || 0
+      acc.sumTotal += amt
+      acc.sumPending += getPendingAmount(inv)
+      return acc
+    },
+    { sumTotal: 0, sumPending: 0 }
+  )
+
   const handleSync = async () => {
     const from = dateFrom || new Date().toISOString().slice(0, 10)
     const to = dateTo || new Date().toISOString().slice(0, 10)
@@ -86,7 +109,22 @@ export default function Invoices() {
   return (
     <div className="invoices-page">
       <div className="page-header">
-        <h1 className="page-title">Invoices</h1>
+        <div className="page-header-titles">
+          <h1 className="page-title">Invoices</h1>
+          <div className="inv-summary-strip" aria-live="polite">
+            <div className="inv-stat">
+              <span className="inv-stat-label">Total</span>
+              <span className="inv-stat-value">{formatCurrency(sumTotal)}</span>
+            </div>
+            <div className="inv-stat inv-stat--pending">
+              <span className="inv-stat-label">Pending</span>
+              <span className="inv-stat-value">{formatCurrency(sumPending)}</span>
+            </div>
+            <span className="inv-summary-note">
+              {invoices.length} invoice{invoices.length === 1 ? '' : 's'} (filtered)
+            </span>
+          </div>
+        </div>
         <div className="page-header-actions">
           <div className="filter-group">
             <label className="sync-date-range">

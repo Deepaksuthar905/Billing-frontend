@@ -105,6 +105,8 @@ export default function InvoiceNew() {
   const skipStateSupplyTaxEffectRef = useRef(false)
   const [invoiceType, setInvoiceType] = useState('sale') // sale | purchase
   const [credit, setCredit] = useState(false)
+  /** Full payment received now vs due later (paylater / balance). */
+  const [isPaid, setIsPaid] = useState(true)
   const [customerInput, setCustomerInput] = useState('')
   const [billingName, setBillingName] = useState('')
   const [billingAddress, setBillingAddress] = useState('')
@@ -182,6 +184,18 @@ export default function InvoiceNew() {
     setStateOfSupply(String(inv.state ?? inv.place_of_supply ?? inv.state_of_supply ?? '').trim())
     setRefno(String(inv.refno ?? '').trim())
     setCredit(inv.paytype === 1 || inv.paytype === '1' || inv.credit === true || inv.credit === 1)
+
+    const invTotal = Number(inv.payment ?? inv.amount) || 0
+    const pNow = Number(inv.paynow)
+    const pLater = Number(inv.paylater)
+    const bal = Number(inv.balance)
+    const st = String(inv.status || '').toLowerCase()
+    let paid = true
+    if (st === 'pending' || st === 'unpaid' || st === 'overdue') paid = false
+    else if (!Number.isNaN(pLater) && pLater > 0.005) paid = false
+    else if (!Number.isNaN(bal) && bal > 0.005) paid = false
+    else if (invTotal > 0 && !Number.isNaN(pNow) && pNow < invTotal - 0.005) paid = false
+    setIsPaid(paid)
 
     const rawItems = Array.isArray(inv.items) ? inv.items : Array.isArray(inv.line_items) ? inv.line_items : []
     if (rawItems.length > 0) {
@@ -340,6 +354,10 @@ export default function InvoiceNew() {
     const cgstAmt = sameState ? Math.round(totalTax / 2) : 0
     const sgstAmt = sameState ? Math.round(totalTax / 2) : 0
     const igstAmt = sameState ? 0 : Math.round(totalTax)
+    const paymentTotal = Math.round(Number(total) || 0)
+    const paynowVal = isPaid ? paymentTotal : 0
+    const paylaterVal = isPaid ? 0 : paymentTotal
+    const balanceVal = isPaid ? 0 : paymentTotal
     const payload = {
       inv_no: invoiceNumber || '',
       dt: invoiceDate,
@@ -347,16 +365,17 @@ export default function InvoiceNew() {
       pid: Number(pid) || 0,
       addr: billingAddress.trim() || '',
       gst: 18,
-      payment: Math.round(Number(total) || 0),
+      payment: paymentTotal,
       cgst: cgstAmt,
       sgst: sgstAmt,
       igst: igstAmt,
       paytype: credit ? 1 : 0,
-      paynow: 1,
+      paynow: paynowVal,
       payby: 1,
       refno: refno.trim() || '',
-      paylater: 0,
-      balance: 0,
+      paylater: paylaterVal,
+      balance: balanceVal,
+      status: isPaid ? 'paid' : 'pending',
       items: lineItems.map((line) => ({
         item_id: line.itemId || undefined,
         item: line.item,
@@ -439,6 +458,29 @@ export default function InvoiceNew() {
           <span className="toggle-slider" />
         </label>
         <span className="invoice-type-label invoice-type-cash">Bank</span>
+      </div>
+
+      <div className="invoice-paid-bar" role="group" aria-label="Payment status">
+        <span className="invoice-paid-label">Payment</span>
+        <div className="invoice-paid-segment">
+          <button
+            type="button"
+            className={`invoice-paid-btn${isPaid ? ' invoice-paid-btn--active' : ''}`}
+            onClick={() => setIsPaid(true)}
+          >
+            Paid
+          </button>
+          <button
+            type="button"
+            className={`invoice-paid-btn${!isPaid ? ' invoice-paid-btn--active' : ''}`}
+            onClick={() => setIsPaid(false)}
+          >
+            Unpaid
+          </button>
+        </div>
+        <span className="invoice-paid-hint">
+          {isPaid ? 'Full amount in paynow; paylater & balance 0.' : `Total will go to paylater & balance until received.`}
+        </span>
       </div>
 
       <div className="invoice-form-card card">
