@@ -170,7 +170,7 @@ export default function InvoicePreviewModal({ invId, onClose }) {
             <table className="inv-items-table">
               <thead>
                 <tr>
-                  <th className="inv-col-sno">#</th>
+                  <th className="inv-col-sno">S no.</th>
                   <th className="inv-col-item">Item name</th>
                   <th className="inv-col-hsn">HSN / SAC</th>
                   <th className="inv-col-qty">Quantity</th>
@@ -192,7 +192,7 @@ export default function InvoicePreviewModal({ invId, onClose }) {
                         <tr key={idx}>
                           <td className="text-center">{idx + 1}</td>
                           <td>
-                            <div className="inv-item-name">{item.item ?? item.item_name ?? item.name ?? '—'}</div>
+                            <div className="inv-item-name">{item.item ?? item.item_name ?? item.name ?? ''}</div>
                             {item.description && <div className="inv-item-desc">{item.description}</div>}
                             {item.item_code && <div className="inv-item-desc">({item.item_code})</div>}
                           </td>
@@ -268,14 +268,14 @@ export default function InvoicePreviewModal({ invId, onClose }) {
                       <td className="text-right">{n2(taxableAmt)}</td>
                       {isIgst ? (
                         <>
-                          <td className="text-center">{inv.igst_rate ?? inv.gst ?? 18}</td>
+                          <td className="text-center">18%</td>
                           <td className="text-right">{n2(igst)}</td>
                         </>
                       ) : (
                         <>
-                          <td className="text-center">{inv.cgst_rate ?? inv.gst_rate ?? 9}</td>
+                          <td className="text-center">9%</td>
                           <td className="text-right">{n2(cgst)}</td>
-                          <td className="text-center">{inv.sgst_rate ?? inv.gst_rate ?? 9}</td>
+                          <td className="text-center">9%</td>
                           <td className="text-right">{n2(sgst)}</td>
                         </>
                       )}

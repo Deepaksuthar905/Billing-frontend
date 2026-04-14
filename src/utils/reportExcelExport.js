@@ -51,6 +51,9 @@ export function exportCurrentReport(ctx) {
     gstRateRows,
     ledgerFrom,
     ledgerTo,
+    ledgerPayByPbid,
+    ledgerPayByName,
+    ledgerPayByDetail,
     ledgerRows,
     ledgerSummary,
     expRptFrom,
@@ -141,11 +144,26 @@ export function exportCurrentReport(ctx) {
     })
     baseName = `Expenses_Report_${expRptFrom ?? ''}_${expRptTo ?? ''}`
   } else if (activeReportId === 'ledger') {
+    const ledgerPayByRows =
+      ledgerPayByPbid != null || ledgerPayByName != null || ledgerPayByDetail != null
+        ? [
+            [
+              'Bank / Pay by',
+              ledgerPayByName
+                ? `${ledgerPayByName}${ledgerPayByPbid != null ? ` (pbid ${ledgerPayByPbid})` : ''}`
+                : ledgerPayByPbid != null
+                  ? `pbid ${ledgerPayByPbid}`
+                  : '—',
+            ],
+            ['Detail', ledgerPayByDetail ?? '—'],
+          ]
+        : []
     sheets.push({
       name: 'Ledger',
       rows: [
         ['Ledger Report'],
         ['Period', `${ledgerFrom ?? ''} to ${ledgerTo ?? ''}`],
+        ...ledgerPayByRows,
         [],
         ['Date', 'Particulars', 'Voucher Type', 'Voucher No', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)'],
         ...(ledgerRows || []).map((row) => [

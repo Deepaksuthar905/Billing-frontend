@@ -308,6 +308,44 @@
   border-top: 1px solid var(--border, #e5e7eb);
 }
 
+.inv-bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius, 8px);
+}
+
+.inv-bulk-bar-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text, #111827);
+  margin-right: auto;
+}
+
+.inv-bulk-bar .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.invoices-page .inv-col-check {
+  width: 2.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.invoices-page .inv-row-check {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+}
+
 @media (max-width: 768px) {
   .invoices-page .filters-row {
     flex-direction: column;

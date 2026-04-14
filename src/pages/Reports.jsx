@@ -1,6 +1,13 @@
-import { useState } from 'react'
-import { BarChart3, TrendingUp, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
-import { useGetGstRateReportQuery, useGetInvoicesQuery, useGetPurchaseOrdersQuery, useGetLedgerQuery, useGetExpenseReportQuery } from '../store/api'
+import { useState, useEffect } from 'react'
+import { BarChart3, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
+import {
+  useGetGstRateReportQuery,
+  useGetInvoicesQuery,
+  useGetPurchaseOrdersQuery,
+  useGetLedgerQuery,
+  useGetExpenseReportQuery,
+  useGetPayByListQuery,
+} from '../store/api'
 import { exportCurrentReport } from '../utils/reportExcelExport'
 import './Reports.css'
 
@@ -20,14 +27,46 @@ function parseIsoDatePart(value) {
   return m ? m[1] : null
 }
 
-function defaultPurchaseRegFrom() {
-  const d = new Date()
-  d.setFullYear(d.getFullYear() - 2)
-  return d.toISOString().slice(0, 10)
+function toYmdLocal(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-function defaultPurchaseRegTo() {
-  return new Date().toISOString().slice(0, 10)
+/** Inclusive window ending today: e.g. 7 → today and previous 6 days. */
+function rollingDaysFromTo(numDays) {
+  const today = new Date()
+  const end = toYmdLocal(today)
+  const start = new Date(today)
+  start.setDate(start.getDate() - (numDays - 1))
+  return { from: toYmdLocal(start), to: end }
+}
+
+function dateRangePresetToFromTo(preset) {
+  const today = new Date()
+  const endToday = toYmdLocal(today)
+  if (preset === 'current-month') {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1)
+    return { from: toYmdLocal(start), to: endToday }
+  }
+  if (preset === 'last-month') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    const end = new Date(today.getFullYear(), today.getMonth(), 0)
+    return { from: toYmdLocal(start), to: toYmdLocal(end) }
+  }
+  if (preset === '7d') return rollingDaysFromTo(7)
+  if (preset === '30d') return rollingDaysFromTo(30)
+  if (preset === '90d') return rollingDaysFromTo(90)
+  return null
+}
+
+function defaultRange7d() {
+  return rollingDaysFromTo(7)
+}
+
+function defaultRangeCurrentMonth() {
+  return dateRangePresetToFromTo('current-month') ?? defaultRange7d()
 }
 
 function buildGstRateRows(data) {
@@ -68,7 +107,6 @@ function buildGstRateRows(data) {
 }
 
 const reportCategories = [
-  { id: 'sales', title: 'Sales Report', desc: 'Day-wise, item-wise sales summary', icon: TrendingUp },
   { id: 'purchase', title: 'Expenses Report', desc: 'Purchase orders and vendor summary', icon: BarChart3 },
   { id: 'gst', title: 'GST Reports', desc: 'GSTR-1, 3B, purchase register, rate-wise tax', icon: FileText },
   { id: 'profit', title: 'Profit & Loss', desc: 'Revenue, expenses and profit', icon: BarChart3 },
@@ -122,7 +160,7 @@ function buildPurchaseRegisterRows(purchases) {
           : 0
     return {
       gstin: po.vendor_gstin ?? po.gstin ?? po.gst_no ?? po.gstin_no,
-      partyName: po.vendor ?? po.vendor_name ?? po.partyname ?? po.supplier,
+      partyName: po.vendor ?? po.vendor_name ?? po.partyname ?? po.billing_name,
       invNo: po.inv_no ?? po.po_no ?? po.bill_no ?? po.id,
       date: po.dt ?? po.date,
       value: billValue,
@@ -183,33 +221,80 @@ function summarizePurchaseItc(purchases) {
   }
   return { taxable, igst, cgst, sgst, gross, totalTax: igst + cgst + sgst }
 }
-
-const mockSalesReport = [
-  { date: '10 Mar', sales: 42000 },
-  { date: '11 Mar', sales: 38000 },
-  { date: '12 Mar', sales: 51000 },
-  { date: '13 Mar', sales: 45000 },
-  { date: '14 Mar', sales: 62000 },
-  { date: '15 Mar', sales: 48500 },
-  { date: '16 Mar', sales: 41200 },
-]
-
 export default function Reports() {
-  const [dateRange, setDateRange] = useState('7d')
-  const [activeReportId, setActiveReportId] = useState('sales')
+  const [dateRange, setDateRange] = useState('current-month')
+  const [activeReportId, setActiveReportId] = useState('purchase')
   const [activeGstSub, setActiveGstSub] = useState('gstr1')
-  const [gstRateFrom, setGstRateFrom] = useState('2026-03-01')
-  const [gstRateTo, setGstRateTo] = useState('2026-03-18')
-  const [gstr1From, setGstr1From] = useState('2026-03-01')
-  const [gstr1To, setGstr1To] = useState('2026-03-18')
-  const [gstr3bFrom, setGstr3bFrom] = useState('2026-03-01')
-  const [gstr3bTo, setGstr3bTo] = useState('2026-03-18')
-  const [purchaseRegFrom, setPurchaseRegFrom] = useState(() => defaultPurchaseRegFrom())
-  const [purchaseRegTo, setPurchaseRegTo] = useState(() => defaultPurchaseRegTo())
-  const [ledgerFrom, setLedgerFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10))
-  const [ledgerTo, setLedgerTo] = useState(new Date().toISOString().slice(0, 10))
-  const [expRptFrom, setExpRptFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10))
-  const [expRptTo, setExpRptTo] = useState(new Date().toISOString().slice(0, 10))
+  const [gstRateFrom, setGstRateFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [gstRateTo, setGstRateTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [gstr1From, setGstr1From] = useState(() => defaultRangeCurrentMonth().from)
+  const [gstr1To, setGstr1To] = useState(() => defaultRangeCurrentMonth().to)
+  const [gstr3bFrom, setGstr3bFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [gstr3bTo, setGstr3bTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [purchaseRegFrom, setPurchaseRegFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [purchaseRegTo, setPurchaseRegTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [ledgerFrom, setLedgerFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [ledgerTo, setLedgerTo] = useState(() => defaultRangeCurrentMonth().to)
+  /** Applied to API only after Apply — draft dates stay in ledgerFrom / ledgerTo */
+  const [ledgerAppliedFrom, setLedgerAppliedFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [ledgerAppliedTo, setLedgerAppliedTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [expRptFrom, setExpRptFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [expRptTo, setExpRptTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [ledgerPayById, setLedgerPayById] = useState('')
+  /** Set on Apply only — changing dropdown does not refetch */
+  const [ledgerAppliedPbid, setLedgerAppliedPbid] = useState(undefined)
+
+  const handleHeaderDateRangeChange = (preset) => {
+    setDateRange(preset)
+  }
+
+  useEffect(() => {
+    if (dateRange === 'custom') return
+    const r = dateRangePresetToFromTo(dateRange)
+    if (!r) return
+    if (activeReportId === 'purchase') {
+      setExpRptFrom(r.from)
+      setExpRptTo(r.to)
+    } else if (activeReportId === 'ledger') {
+      setLedgerFrom(r.from)
+      setLedgerTo(r.to)
+    } else if (activeReportId === 'gst') {
+      if (activeGstSub === 'gstr1') {
+        setGstr1From(r.from)
+        setGstr1To(r.to)
+      } else if (activeGstSub === 'gstr3b') {
+        setGstr3bFrom(r.from)
+        setGstr3bTo(r.to)
+      } else if (activeGstSub === 'purchase-reg') {
+        setPurchaseRegFrom(r.from)
+        setPurchaseRegTo(r.to)
+      } else if (activeGstSub === 'gst-rate') {
+        setGstRateFrom(r.from)
+        setGstRateTo(r.to)
+      }
+    }
+  }, [activeReportId, activeGstSub, dateRange])
+
+  const { data: ledgerPayByData, isLoading: ledgerPayByLoading, isError: ledgerPayByError } = useGetPayByListQuery(
+    undefined,
+    { skip: activeReportId !== 'ledger' }
+  )
+  const ledgerPayByList = ledgerPayByData?.data ?? []
+
+  useEffect(() => {
+    if (activeReportId !== 'ledger') return
+    const list = ledgerPayByData?.data
+    if (!list?.length) return
+    setLedgerPayById((prev) => (prev === '' ? String(list[0].pbid) : prev))
+  }, [activeReportId, ledgerPayByData?.data])
+
+  const selectedLedgerPayBy = ledgerPayByList.find((p) => String(p.pbid) === String(ledgerPayById))
+  const selectedLedgerPayByApplied =
+    ledgerAppliedPbid != null && ledgerAppliedPbid !== ''
+      ? ledgerPayByList.find((p) => String(p.pbid) === String(ledgerAppliedPbid))
+      : undefined
+  const ledgerPbidForApi =
+    ledgerAppliedPbid != null && ledgerAppliedPbid !== '' ? ledgerAppliedPbid : undefined
 
   const { data: invoicesData, isLoading: gstr1Loading } = useGetInvoicesQuery(
     { from: gstr1From, to: gstr1To },
@@ -258,7 +343,7 @@ export default function Reports() {
           : 0
     return {
       gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
-      partyName: inv.customer ?? inv.customer_name ?? inv.partyname,
+      partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
       invNo: inv.inv_no ?? inv.id,
       date: inv.dt ?? inv.date,
       value: invoiceValue,
@@ -268,9 +353,9 @@ export default function Reports() {
       sgst,
       igst,
       /** Table columns: Integrated → SGST, Central → IGST, State → CGST (per report layout) */
-      integratedTaxDisplay: sgst,
-      centralTaxDisplay: igst,
-      stateTaxDisplay: cgst,
+      integratedTaxDisplay: igst,
+      centralTaxDisplay: cgst,
+      stateTaxDisplay: sgst,
       placeOfSupply: inv.state ?? inv.place_of_supply ?? inv.state_name ?? inv.pos,
     }
   })
@@ -336,8 +421,8 @@ export default function Reports() {
     { skip: !(activeReportId === 'gst' && activeGstSub === 'gst-rate') }
   )
 
-  const { data: ledgerData, isLoading: ledgerLoading, refetch: ledgerRefetch } = useGetLedgerQuery(
-    { from: ledgerFrom, to: ledgerTo },
+  const { data: ledgerData, isLoading: ledgerLoading } = useGetLedgerQuery(
+    { from: ledgerAppliedFrom, to: ledgerAppliedTo, pbid: ledgerPbidForApi },
     { skip: activeReportId !== 'ledger', refetchOnMountOrArgChange: true }
   )
   const ledgerRows = ledgerData?.entries ?? []
@@ -359,11 +444,22 @@ export default function Reports() {
     if (id === 'gst') setActiveGstSub('gstr1')
   }
 
+  const handleLedgerApply = () => {
+    setLedgerAppliedFrom(ledgerFrom)
+    setLedgerAppliedTo(ledgerTo)
+    setLedgerAppliedPbid(ledgerPayById !== '' ? ledgerPayById : undefined)
+  }
+
+  const ledgerFiltersPending =
+    activeReportId === 'ledger' &&
+    (ledgerFrom !== ledgerAppliedFrom ||
+      ledgerTo !== ledgerAppliedTo ||
+      String(ledgerPayById || '') !== String(ledgerAppliedPbid ?? ''))
+
   const handleExportExcel = () => {
     exportCurrentReport({
       activeReportId,
       activeGstSub,
-      mockSalesReport,
       gstr1From,
       gstr1To,
       gstr1Rows,
@@ -382,8 +478,11 @@ export default function Reports() {
       gstRateFrom,
       gstRateTo,
       gstRateRows,
-      ledgerFrom,
-      ledgerTo,
+      ledgerFrom: ledgerAppliedFrom,
+      ledgerTo: ledgerAppliedTo,
+      ledgerPayByPbid: ledgerPbidForApi,
+      ledgerPayByName: selectedLedgerPayByApplied?.name,
+      ledgerPayByDetail: selectedLedgerPayByApplied?.detail,
       ledgerRows,
       ledgerSummary,
       expRptFrom,
@@ -402,9 +501,12 @@ export default function Reports() {
             <Calendar size={18} />
             <select
               value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
+              onChange={(e) => handleHeaderDateRangeChange(e.target.value)}
               className="select-input"
-            >
+              aria-label="Report date range preset"
+            > 
+              <option value="current-month">current month</option>
+              <option value="last-month">last month</option>
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
               <option value="90d">Last 90 days</option>
@@ -454,29 +556,6 @@ export default function Reports() {
         </aside>
 
         <div className="reports-content">
-          {activeReportId === 'sales' && (
-            <div className="card">
-              <h2 className="card-title">Sales Overview (Last 7 days)</h2>
-              <div className="chart-placeholder">
-                <div className="bar-chart">
-                  {mockSalesReport.map((d) => (
-                    <div key={d.date} className="bar-group">
-                      <div
-                        className="bar"
-                        style={{ height: `${(d.sales / 70000) * 100}%` }}
-                        title={`₹${d.sales.toLocaleString('en-IN')}`}
-                      />
-                      <span className="bar-label">{d.date}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="chart-legend">
-                <span>₹ Thousand</span>
-              </div>
-            </div>
-          )}
-
           {activeReportId === 'purchase' && (
             <div className="exp-report">
               {/* Toolbar */}
@@ -484,11 +563,27 @@ export default function Reports() {
                 <div className="gst-rate-dates">
                   <label>
                     <span>From</span>
-                    <input type="date" value={expRptFrom} onChange={(e) => setExpRptFrom(e.target.value)} className="form-input" />
+                    <input
+                      type="date"
+                      value={expRptFrom}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setExpRptFrom(e.target.value)
+                      }}
+                      className="form-input"
+                    />
                   </label>
                   <label>
                     <span>To</span>
-                    <input type="date" value={expRptTo} onChange={(e) => setExpRptTo(e.target.value)} className="form-input" />
+                    <input
+                      type="date"
+                      value={expRptTo}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setExpRptTo(e.target.value)
+                      }}
+                      className="form-input"
+                    />
                   </label>
                 </div>
               </div>
@@ -606,11 +701,27 @@ export default function Reports() {
                 <div className="gst-rate-dates">
                   <label>
                     <span>From</span>
-                    <input type="date" value={gstr1From} onChange={(e) => setGstr1From(e.target.value)} className="form-input" />
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
                   </label>
                   <label>
                     <span>To</span>
-                    <input type="date" value={gstr1To} onChange={(e) => setGstr1To(e.target.value)} className="form-input" />
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
                   </label>
                 </div>
               </div>
@@ -643,7 +754,7 @@ export default function Reports() {
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
                         <td className="text-right">{formatReportAmount(row.value)}</td>
-                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">18%</td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
                         <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
                         <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
@@ -693,7 +804,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={gstr3bFrom}
-                      onChange={(e) => setGstr3bFrom(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr3bFrom(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -702,7 +816,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={gstr3bTo}
-                      onChange={(e) => setGstr3bTo(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr3bTo(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -816,7 +933,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={purchaseRegFrom}
-                      onChange={(e) => setPurchaseRegFrom(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setPurchaseRegFrom(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -825,7 +945,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={purchaseRegTo}
-                      onChange={(e) => setPurchaseRegTo(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setPurchaseRegTo(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -913,7 +1036,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={gstRateFrom}
-                      onChange={(e) => setGstRateFrom(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstRateFrom(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -922,7 +1048,10 @@ export default function Reports() {
                     <input
                       type="date"
                       value={gstRateTo}
-                      onChange={(e) => setGstRateTo(e.target.value)}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstRateTo(e.target.value)
+                      }}
                       className="form-input"
                     />
                   </label>
@@ -992,34 +1121,64 @@ export default function Reports() {
 
           {activeReportId === 'ledger' && (
             <div className="card">
-              {/* Date filter row */}
               <div className="ledger-toolbar">
                 <h2 className="card-title" style={{ margin: 0 }}>Ledger</h2>
-                <div className="ledger-date-row">
-                  <label className="ledger-date-label">From</label>
-                  <input
-                    type="date"
-                    value={ledgerFrom}
-                    onChange={(e) => setLedgerFrom(e.target.value)}
-                    className="input-sm"
-                  />
-                  <label className="ledger-date-label">To</label>
-                  <input
-                    type="date"
-                    value={ledgerTo}
-                    onChange={(e) => setLedgerTo(e.target.value)}
-                    className="input-sm"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={ledgerRefetch}
-                    disabled={ledgerLoading}
-                  >
-                    {ledgerLoading ? 'Loading...' : 'Apply'}
-                  </button>
+                <div className="ledger-toolbar-filters">
+                  <div className="ledger-pay-by-group">
+                    <label className="ledger-pay-by-label">
+                      <span>Bank / Pay by</span>
+                      <select
+                        className="input-sm ledger-pay-by-select"
+                        value={ledgerPayById}
+                        onChange={(e) => setLedgerPayById(e.target.value)}
+                        disabled={ledgerPayByLoading || ledgerPayByError || ledgerPayByList.length === 0}
+                        aria-label="Bank or pay-by account for ledger"
+                      >
+                        {ledgerPayByList.map((p) => (
+                          <option key={p.pbid} value={String(p.pbid)}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="ledger-date-row">
+                    <label className="ledger-date-label">From</label>
+                    <input
+                      type="date"
+                      value={ledgerFrom}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setLedgerFrom(e.target.value)
+                      }}
+                      className="input-sm"
+                    />
+                    <label className="ledger-date-label">To</label>
+                    <input
+                      type="date"
+                      value={ledgerTo}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setLedgerTo(e.target.value)
+                      }}
+                      className="input-sm"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleLedgerApply}
+                      disabled={ledgerLoading}
+                    >
+                      {ledgerLoading ? 'Loading...' : 'Apply'}
+                    </button>
+                  </div>
                 </div>
               </div>
+              {ledgerFiltersPending && (
+                <p className="ledger-pending-hint text-muted">
+                  Selected bank or dates are not loaded yet — click <strong>Apply</strong> to fetch from the server.
+                </p>
+              )}
 
               {/* Summary cards */}
               {ledgerSummary && (
