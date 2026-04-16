@@ -166,9 +166,9 @@ function buildPurchaseRegisterRows(purchases) {
       value: billValue,
       taxRate,
       taxableValue: safeTaxable,
-      integratedTaxDisplay: sgst,
-      centralTaxDisplay: igst,
-      stateTaxDisplay: cgst,
+      integratedTaxDisplay: igst,
+      centralTaxDisplay: cgst,
+      stateTaxDisplay: sgst,
       placeOfSupply: po.state ?? po.place_of_supply ?? po.state_name ?? po.pos,
     }
   })
@@ -409,9 +409,9 @@ export default function Reports() {
   const purchaseRegTotals = purchaseRegRows.length
     ? {
         taxable: purchaseRegRows.reduce((s, r) => s + (r.taxableValue || 0), 0),
-        igst: purchaseRegRows.reduce((s, r) => s + (r.centralTaxDisplay || 0), 0),
-        cgst: purchaseRegRows.reduce((s, r) => s + (r.stateTaxDisplay || 0), 0),
-        sgst: purchaseRegRows.reduce((s, r) => s + (r.integratedTaxDisplay || 0), 0),
+        igst: purchaseRegRows.reduce((s, r) => s + (r.integratedTaxDisplay || 0), 0),
+        cgst: purchaseRegRows.reduce((s, r) => s + (r.centralTaxDisplay || 0), 0),
+        sgst: purchaseRegRows.reduce((s, r) => s + (r.stateTaxDisplay || 0), 0),
         value: purchaseRegRows.reduce((s, r) => s + (r.value || 0), 0),
       }
     : null
@@ -1010,13 +1010,13 @@ export default function Reports() {
                           <strong>{formatReportAmount(purchaseRegTotals.taxable)}</strong>
                         </td>
                         <td className="text-right">
-                          <strong>{formatReportAmount(purchaseRegTotals.sgst)}</strong>
-                        </td>
-                        <td className="text-right">
                           <strong>{formatReportAmount(purchaseRegTotals.igst)}</strong>
                         </td>
                         <td className="text-right">
                           <strong>{formatReportAmount(purchaseRegTotals.cgst)}</strong>
+                        </td>
+                        <td className="text-right">
+                          <strong>{formatReportAmount(purchaseRegTotals.sgst)}</strong>
                         </td>
                         <td />
                       </tr>
