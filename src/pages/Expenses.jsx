@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Edit, Plus, Search, Trash2 } from 'lucide-react'
 import { useGetExpenseHeadsQuery, useGetExpensesQuery, useDeleteExpenseMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Expenses.css'
@@ -165,7 +165,14 @@ export default function Expenses() {
                       <td>{formatCurrency(Number(exp.payment) || 0)}</td>
                       <td>
                         <div className="action-btns">
-                          <button type="button" className="btn-icon">→</button>
+                          <Link
+                            to={`/expenses/new?exid=${exp.exid}`}
+                            state={{ expense: exp }}
+                            className="btn-icon"
+                            aria-label="Edit expense"
+                          >
+                            <Edit size={15} />
+                          </Link>
                           <button
                             type="button"
                             className="btn-icon btn-icon--danger"

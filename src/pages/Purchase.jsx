@@ -107,7 +107,8 @@ export default function Purchase() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>PO</th>
+                  {/* <th>PO</th> */}
+                  <th>S No.</th>
                   <th>Invoice</th>
                   <th>Date</th>
                   <th>Vendor</th>
@@ -118,9 +119,10 @@ export default function Purchase() {
                 </tr>
               </thead>
               <tbody>
-                {purchaseOrders.map((po) => (
+                {purchaseOrders.map((po, index) => (
                   <tr key={po.id}>
-                    <td className="font-medium">{po.id}</td>
+                    {/* <td className="font-medium">{po.id}</td> */}
+                    <td className="font-medium">{index + 1}</td>
                     <td>{po.p_inv_no ?? '—'}</td>
                     <td>{po.dateFormatted}</td>
                     <td>{po.vendor}</td>

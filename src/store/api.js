@@ -262,9 +262,22 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'Expense', id })), 'Expense']
           : ['Expense'],
     }),
+    getExpenseById: builder.query({
+      query: (exid) => ({ url: `/expenses/${exid}` }),
+      transformResponse: (r) => {
+        if (!r || typeof r !== 'object') return null
+        if (r.data && typeof r.data === 'object' && !Array.isArray(r.data)) return r.data
+        return r
+      },
+      providesTags: (_r, _e, exid) => [{ type: 'Expense', id: exid }, 'Expense'],
+    }),
     createExpense: builder.mutation({
       query: (body) => ({ url: '/expenses', method: 'POST', body }),
       invalidatesTags: ['Expense', 'Dashboard'],
+    }),
+    updateExpense: builder.mutation({
+      query: ({ exid, ...body }) => ({ url: `/expenses/${exid}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { exid }) => [{ type: 'Expense', id: exid }, 'Expense', 'ExpenseHead', 'Dashboard'],
     }),
     deleteExpense: builder.mutation({
       query: (exid) => ({ url: `/delexpenses/${exid}`, method: 'POST' }),
@@ -295,7 +308,9 @@ export const {
   useGetExpenseHeadsQuery,
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,
+  useGetExpenseByIdQuery,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
   useDeleteExpenseMutation,
   useGetExpenseReportQuery,
 } = billingApi

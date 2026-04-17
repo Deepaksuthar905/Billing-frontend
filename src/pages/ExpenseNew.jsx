@@ -1,10 +1,12 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { X, Plus, Calculator, Settings, FileText } from 'lucide-react'
 import {
   useGetExpenseHeadsQuery,
   useCreateExpenseHeadMutation,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
+  useGetExpenseByIdQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
 } from '../store/api'
@@ -22,15 +24,53 @@ const emptyLineItem = () => ({
   amount: 0,
 })
 
+function dtToYmd(dt) {
+  if (!dt) return new Date().toISOString().slice(0, 10)
+  const d = new Date(dt)
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Parse API `description` "Item - detail" into line fields; amount from payment */
+function lineFromExpense(exp) {
+  const cat = exp.expenses_head?.name ?? ''
+  const desc = String(exp.description ?? '').trim()
+  const payment = Math.round(Number(exp.payment) || 0)
+  if (!desc) {
+    return { item: cat, description: '', qty: 1, price: payment, amount: payment }
+  }
+  const parts = desc
+    .split(' - ')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length <= 1) {
+    return { item: parts[0] || cat, description: '', qty: 1, price: payment, amount: payment }
+  }
+  return {
+    item: parts[0],
+    description: parts.slice(1).join(' - '),
+    qty: 1,
+    price: payment,
+    amount: payment,
+  }
+}
+
 export default function ExpenseNew() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const exidFromUrl = searchParams.get('exid')
+  const expenseFromNav = location.state?.expense
+  const hydratedExidRef = useRef(null)
+
+  const [editingExid, setEditingExid] = useState(null)
 
   // Form state
   const [expHeadId, setExpHeadId] = useState('')
   const [expNo, setExpNo] = useState('')
   const [expDate, setExpDate] = useState(new Date().toISOString().slice(0, 10))
   const [pid, setPid] = useState('')
-  const [payby, setPayby] = useState(0)
+  const [payby, setPayby] = useState('')
   const [refno, setRefno] = useState('')
   const [lineItems, setLineItems] = useState([emptyLineItem()])
   const [roundOff, setRoundOff] = useState(true)
@@ -62,6 +102,10 @@ export default function ExpenseNew() {
 
   const [createExpenseHead, { isLoading: isSavingHead }] = useCreateExpenseHeadMutation()
   const [createExpense, { isLoading: isSaving }] = useCreateExpenseMutation()
+  const [updateExpense, { isLoading: isUpdating }] = useUpdateExpenseMutation()
+  const { data: expenseFetched, isLoading: expenseDetailLoading } = useGetExpenseByIdQuery(exidFromUrl, {
+    skip: !exidFromUrl || Boolean(expenseFromNav),
+  })
   const [createCustomer, { isLoading: isCreatingParty }] = useCreateCustomerMutation()
 
   // Line item helpers
@@ -70,6 +114,42 @@ export default function ExpenseNew() {
     const price = Number(line.price) || 0
     return { ...line, amount: round2(qty * price) }
   }
+
+  useEffect(() => {
+    const exp = expenseFromNav ?? expenseFetched
+    if (!exp?.exid) return
+    if (hydratedExidRef.current === exp.exid) return
+    hydratedExidRef.current = exp.exid
+    setEditingExid(exp.exid)
+    setExpHeadId(exp.exhid != null ? String(exp.exhid) : '')
+    setExpNo(exp.receipt_no != null ? String(exp.receipt_no) : '')
+    setExpDate(dtToYmd(exp.dt))
+    setPid(exp.party != null && exp.party !== '' ? String(exp.party) : '')
+    setPayby(exp.payby !== undefined && exp.payby !== null ? String(exp.payby) : '')
+    setRefno(exp.refno != null ? String(exp.refno) : '')
+    const line = lineFromExpense(exp)
+    setLineItems([recalcLine(line)])
+    setRoundOff(false)
+    setRoundOffValue(0)
+  }, [expenseFromNav, expenseFetched])
+
+  /** Same route `/expenses/new`: clear edit state when opening a brand-new expense (no exid / no nav state). */
+  useEffect(() => {
+    const hasEditTarget = Boolean(exidFromUrl || expenseFromNav)
+    if (hasEditTarget) return
+    if (hydratedExidRef.current === null) return
+    hydratedExidRef.current = null
+    setEditingExid(null)
+    setExpHeadId('')
+    setExpNo('')
+    setExpDate(new Date().toISOString().slice(0, 10))
+    setPid('')
+    setPayby('')
+    setRefno('')
+    setLineItems([emptyLineItem()])
+    setRoundOff(true)
+    setRoundOffValue(0)
+  }, [exidFromUrl, expenseFromNav])
 
   const updateLineItem = (index, field, value) => {
     setLineItems((prev) => {
@@ -201,10 +281,14 @@ export default function ExpenseNew() {
       refno: refno.trim() || undefined,
     }
     try {
-      await createExpense(payload).unwrap()
+      if (editingExid != null) {
+        await updateExpense({ exid: editingExid, ...payload }).unwrap()
+      } else {
+        await createExpense(payload).unwrap()
+      }
       navigate('/expenses')
     } catch (err) {
-      console.error('Create expense failed:', err)
+      console.error(editingExid != null ? 'Update expense failed:' : 'Create expense failed:', err)
       alert(err?.data?.message || err?.data?.detail || 'Could not save expense.')
     }
   }
@@ -222,7 +306,7 @@ export default function ExpenseNew() {
             <Plus size={20} />
           </Link> */}
         </div>
-        <h1 className="exp-new-heading">Expense</h1>
+        <h1 className="exp-new-heading">{editingExid != null ? 'Edit expense' : 'Expense'}</h1>
         <div className="exp-new-header-right">
           {/* <button type="button" className="icon-btn" aria-label="Calculator">
             <Calculator size={18} />
@@ -462,9 +546,17 @@ export default function ExpenseNew() {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={
+                  isSaving ||
+                  isUpdating ||
+                  (Boolean(exidFromUrl) && !expenseFromNav && expenseDetailLoading)
+                }
               >
-                {isSaving ? 'Saving...' : 'Save'}
+                {isSaving || isUpdating
+                  ? 'Saving...'
+                  : expenseDetailLoading && exidFromUrl && !expenseFromNav
+                    ? 'Loading...'
+                    : 'Save'}
               </button>
             </div>
           </div>
