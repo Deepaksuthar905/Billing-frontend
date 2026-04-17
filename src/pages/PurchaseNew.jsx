@@ -9,6 +9,7 @@ import {
   useCreatePurchaseOrderMutation,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
+import { INDIA_STATES } from '../utils/indiaStates'
 import './PurchaseNew.css'
 
 const BUSINESS_STATE = 'Rajasthan'
@@ -374,11 +375,11 @@ export default function PurchaseNew() {
               className="form-input"
             >
               <option value="">Select</option>
-              <option value="Rajasthan">Rajasthan</option>
-              <option value="Maharashtra">Maharashtra</option>
-              <option value="Karnataka">Karnataka</option>
-              <option value="Delhi">Delhi</option>
-              <option value="Tamil Nadu">Tamil Nadu</option>
+              {INDIA_STATES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -705,12 +706,18 @@ export default function PurchaseNew() {
               </div>
               <div className="form-group">
                 <label>State</label>
-                <input
-                  type="text"
+                <select
                   value={newPartyForm.state}
                   onChange={(e) => setNewPartyForm((p) => ({ ...p, state: e.target.value }))}
                   className="form-input"
-                />
+                >
+                  <option value="">Select</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group form-row-check">
                 <label className="form-check">

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Search, Phone, X } from 'lucide-react'
 import { useGetCustomersQuery, useCreateCustomerMutation } from '../store/api'
 import { formatCurrency } from '../utils/format'
+import { INDIA_STATES } from '../utils/indiaStates'
 import './Customers.css'
 
 const fallbackCustomers = [
@@ -292,15 +293,14 @@ export default function Customers() {
               </div>
               <div className="form-group">
                 <label htmlFor="state">State</label>
-                <input
-                  id="state"
-                  type="text"
-                  name="state"
-                  value={form.state}
-                  onChange={handleChange}
-                  placeholder="e.g. Maharashtra"
-                  className="form-input"
-                />
+                <select id="state" name="state" value={form.state} onChange={handleChange} className="form-input">
+                  <option value="">Select</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group form-row-check">
                 <label className="form-check">

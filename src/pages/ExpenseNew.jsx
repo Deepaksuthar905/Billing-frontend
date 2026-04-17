@@ -9,6 +9,7 @@ import {
   useCreateCustomerMutation,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
+import { INDIA_STATES } from '../utils/indiaStates'
 import './ExpenseNew.css'
 
 const round2 = (n) => Math.round(Number(n) * 100) / 100
@@ -411,7 +412,7 @@ export default function ExpenseNew() {
                 ))}
               </select>
             </div>
-            {/* <div className="form-group">
+            <div className="form-group">
               <input
                 type="text"
                 value={refno}
@@ -419,7 +420,7 @@ export default function ExpenseNew() {
                 className="form-input"
                 placeholder="Reference No."
               />
-            </div> */}
+            </div>
             {/* <button type="button" className="btn-outline">
               <FileText size={14} />
               ADD DESCRIPTION
@@ -576,12 +577,18 @@ export default function ExpenseNew() {
               </div>
               <div className="form-group">
                 <label>State</label>
-                <input
-                  type="text"
+                <select
                   value={newPartyForm.state}
                   onChange={(e) => setNewPartyForm((p) => ({ ...p, state: e.target.value }))}
                   className="form-input"
-                />
+                >
+                  <option value="">Select</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group form-row-check">
                 <label className="form-check">
