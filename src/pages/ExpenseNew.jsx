@@ -6,6 +6,7 @@ import {
   useCreateExpenseHeadMutation,
   useCreateExpenseMutation,
   useGetCustomersQuery,
+  useCreateCustomerMutation,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
 import './ExpenseNew.css'
@@ -39,16 +40,28 @@ export default function ExpenseNew() {
   const [newCatName, setNewCatName] = useState('')
   const [newCatType, setNewCatType] = useState('Indirect Expense')
 
+  // Add Party modal state
+  const [showPartyModal, setShowPartyModal] = useState(false)
+  const [newPartyForm, setNewPartyForm] = useState({
+    partyname: '',
+    mobno: '',
+    city: '',
+    state: '',
+    gst_reg: true,
+    same_state: true,
+  })
+
   // API hooks
   const { data: headsData } = useGetExpenseHeadsQuery(undefined, { refetchOnMountOrArgChange: 120 })
   const expenseHeads = headsData?.data ?? []
 
-  const { data: customersData } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
+  const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
   const paybyAccounts = customersData?.payby ?? []
 
   const [createExpenseHead, { isLoading: isSavingHead }] = useCreateExpenseHeadMutation()
   const [createExpense, { isLoading: isSaving }] = useCreateExpenseMutation()
+  const [createCustomer, { isLoading: isCreatingParty }] = useCreateCustomerMutation()
 
   // Line item helpers
   const recalcLine = (line) => {
@@ -96,6 +109,67 @@ export default function ExpenseNew() {
     } catch (err) {
       console.error('Add category failed:', err)
       alert(err?.data?.message || 'Could not add category.')
+    }
+  }
+
+  const openPartyModal = () => {
+    setNewPartyForm({
+      partyname: '',
+      mobno: '',
+      city: '',
+      state: '',
+      gst_reg: true,
+      same_state: true,
+    })
+    setShowPartyModal(true)
+  }
+
+  const closePartyModal = () => {
+    setShowPartyModal(false)
+    setNewPartyForm({
+      partyname: '',
+      mobno: '',
+      city: '',
+      state: '',
+      gst_reg: true,
+      same_state: true,
+    })
+  }
+
+  const handlePartyChange = (value) => {
+    if (value === '__add__') {
+      openPartyModal()
+      return
+    }
+    setPid(value)
+  }
+
+  const handleCreateParty = async () => {
+    if (!newPartyForm.partyname.trim()) {
+      alert('Please enter party name.')
+      return
+    }
+    if (!newPartyForm.mobno.trim()) {
+      alert('Please enter mobile number.')
+      return
+    }
+    try {
+      const res = await createCustomer({
+        partyname: newPartyForm.partyname.trim(),
+        mobno: newPartyForm.mobno.trim(),
+        city: newPartyForm.city.trim(),
+        state: newPartyForm.state.trim(),
+        gst_reg: newPartyForm.gst_reg ? 1 : 0,
+        same_state: newPartyForm.same_state ? 1 : 0,
+        prtytyp: 1,
+      }).unwrap()
+      await refetchCustomers()
+      const createdId = res?.pid ?? res?.id ?? res?.data?.pid ?? res?.data?.id
+      if (createdId != null) setPid(String(createdId))
+      closePartyModal()
+    } catch (err) {
+      console.error('Create party failed:', err)
+      alert(err?.data?.message || err?.data?.detail || 'Could not add party. Please try again.')
     }
   }
 
@@ -310,7 +384,7 @@ export default function ExpenseNew() {
               <label>Party</label>
               <select
                 value={pid}
-                onChange={(e) => setPid(e.target.value)}
+                onChange={(e) => handlePartyChange(e.target.value)}
                 className="form-input"
               >
                 <option value="">Select Party / Account</option>
@@ -319,6 +393,7 @@ export default function ExpenseNew() {
                     {c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`}
                   </option>
                 ))}
+                <option value="__add__">+ Add new party</option>
               </select>
             </div>
             <div className="form-group">
@@ -450,6 +525,91 @@ export default function ExpenseNew() {
                 disabled={isSavingHead}
               >
                 {isSavingHead ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPartyModal && (
+        <div className="modal-overlay" onClick={closePartyModal}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Add Party</span>
+              <button type="button" className="icon-btn" onClick={closePartyModal} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>
+                  Party Name <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newPartyForm.partyname}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, partyname: e.target.value }))}
+                  className="form-input"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>
+                  Mobile No <span className="required">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={newPartyForm.mobno}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, mobno: e.target.value }))}
+                  className="form-input"
+                  placeholder="10-digit mobile number"
+                />
+              </div>
+              <div className="form-group">
+                <label>City</label>
+                <input
+                  type="text"
+                  value={newPartyForm.city}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, city: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>State</label>
+                <input
+                  type="text"
+                  value={newPartyForm.state}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, state: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group form-row-check">
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    checked={newPartyForm.gst_reg}
+                    onChange={(e) => setNewPartyForm((p) => ({ ...p, gst_reg: e.target.checked }))}
+                  />
+                  <span>GST Registered</span>
+                </label>
+              </div>
+              <div className="form-group form-row-check">
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    checked={newPartyForm.same_state}
+                    onChange={(e) => setNewPartyForm((p) => ({ ...p, same_state: e.target.checked }))}
+                  />
+                  <span>Same State</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closePartyModal} disabled={isCreatingParty}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleCreateParty} disabled={isCreatingParty}>
+                {isCreatingParty ? 'Saving...' : 'Submit'}
               </button>
             </div>
           </div>

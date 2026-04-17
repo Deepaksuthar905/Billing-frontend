@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { X, Plus, Calculator, Settings, FileText, Upload } from 'lucide-react'
-import { useGetCustomersQuery, useGetItemsQuery, useCreatePurchaseOrderMutation } from '../store/api'
+import {
+  useGetCustomersQuery,
+  useCreateCustomerMutation,
+  useGetItemsQuery,
+  useCreateItemMutation,
+  useCreatePurchaseOrderMutation,
+} from '../store/api'
 import { formatCurrency } from '../utils/format'
 import './PurchaseNew.css'
 
@@ -37,13 +43,33 @@ export default function PurchaseNew() {
   const [roundOffValue, setRoundOffValue] = useState(0)
   const [refno, setRefno] = useState('')
   const [payby, setPayby] = useState('')
+  const [showItemModal, setShowItemModal] = useState(false)
+  const [itemModalForIndex, setItemModalForIndex] = useState(null)
+  const [newItemForm, setNewItemForm] = useState({
+    item_name: '',
+    hsncode: '',
+    description: '',
+    rate: '',
+    gst: '',
+  })
+  const [showPartyModal, setShowPartyModal] = useState(false)
+  const [newPartyForm, setNewPartyForm] = useState({
+    partyname: '',
+    mobno: '',
+    city: '',
+    state: '',
+    gst_reg: true,
+    same_state: true,
+  })
 
-  const { data: customersData } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
+  const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
   const paybyAccounts = customersData?.payby ?? []
-  const { data: itemsData } = useGetItemsQuery(undefined, { skip: false })
+  const { data: itemsData, refetch: refetchItems } = useGetItemsQuery(undefined, { skip: false })
   const items = itemsData?.data ?? []
   const [createPurchaseOrder, { isLoading: isSaving }] = useCreatePurchaseOrderMutation()
+  const [createItem, { isLoading: isCreatingItem }] = useCreateItemMutation()
+  const [createCustomer, { isLoading: isCreatingParty }] = useCreateCustomerMutation()
 
   const selectedParty = parties.find((c) => String(c.pid ?? c.id) === String(prhid))
 
@@ -83,6 +109,12 @@ export default function PurchaseNew() {
 
   const handleItemSelect = (index, itemId) => {
     if (!itemId) return
+    if (itemId === '__add__') {
+      setItemModalForIndex(index)
+      setNewItemForm({ item_name: '', hsncode: '', description: '', rate: '', gst: '' })
+      setShowItemModal(true)
+      return
+    }
     const invItem = items.find((i) => String(i.id ?? i.item_id) === String(itemId))
     if (!invItem) return
     const qty = Number(lineItems[index]?.qty) || 1
@@ -109,6 +141,120 @@ export default function PurchaseNew() {
   const removeRow = (index) => {
     if (lineItems.length <= 1) return
     setLineItems((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const openPartyModal = () => {
+    setNewPartyForm({
+      partyname: '',
+      mobno: '',
+      city: '',
+      state: '',
+      gst_reg: true,
+      same_state: true,
+    })
+    setShowPartyModal(true)
+  }
+
+  const closePartyModal = () => {
+    setShowPartyModal(false)
+    setNewPartyForm({
+      partyname: '',
+      mobno: '',
+      city: '',
+      state: '',
+      gst_reg: true,
+      same_state: true,
+    })
+  }
+
+  const handlePartyChange = (value) => {
+    if (value === '__add__') {
+      openPartyModal()
+      return
+    }
+    setPrhid(value)
+  }
+
+  const handleCreateParty = async () => {
+    if (!newPartyForm.partyname.trim()) {
+      alert('Please enter party name.')
+      return
+    }
+    if (!newPartyForm.mobno.trim()) {
+      alert('Please enter mobile number.')
+      return
+    }
+    try {
+      const res = await createCustomer({
+        partyname: newPartyForm.partyname.trim(),
+        mobno: newPartyForm.mobno.trim(),
+        city: newPartyForm.city.trim(),
+        state: newPartyForm.state.trim(),
+        gst_reg: newPartyForm.gst_reg ? 1 : 0,
+        same_state: newPartyForm.same_state ? 1 : 0,
+        prtytyp: 1,
+      }).unwrap()
+      await refetchCustomers()
+      const createdId = res?.pid ?? res?.id ?? res?.data?.pid ?? res?.data?.id
+      if (createdId != null) setPrhid(String(createdId))
+      closePartyModal()
+    } catch (err) {
+      console.error('Create party failed:', err)
+      alert(err?.data?.message || err?.data?.detail || 'Could not add party. Please try again.')
+    }
+  }
+
+  const closeItemModal = () => {
+    setShowItemModal(false)
+    setItemModalForIndex(null)
+    setNewItemForm({ item_name: '', hsncode: '', description: '', rate: '', gst: '' })
+  }
+
+  const handleCreateItem = async () => {
+    if (!newItemForm.item_name.trim()) {
+      alert('Please enter item name.')
+      return
+    }
+    if (!newItemForm.hsncode.trim()) {
+      alert('Please enter HSN code.')
+      return
+    }
+    const payload = {
+      item_name: newItemForm.item_name.trim(),
+      hsncode: newItemForm.hsncode.trim(),
+      description: newItemForm.description.trim() || undefined,
+      rate: Number(newItemForm.rate) || 0,
+      with_without: 1,
+      gst: Number(newItemForm.gst) || 0,
+      gst_amt: 0,
+    }
+    try {
+      const res = await createItem(payload).unwrap()
+      await refetchItems()
+      const createdId = res?.id ?? res?.item_id ?? res?.data?.id ?? res?.data?.item_id
+      if (createdId != null && itemModalForIndex != null) {
+        const idx = itemModalForIndex
+        setLineItems((prev) =>
+          prev.map((line, i) => {
+            if (i !== idx) return line
+            const newLine = {
+              ...line,
+              itemId: String(createdId),
+              item: payload.item_name,
+              hsnCode: payload.hsncode,
+              description: payload.description ?? '',
+              price: payload.rate,
+              taxPct: payload.gst || 18,
+            }
+            return recalcLineAmount(newLine, priceType)
+          })
+        )
+      }
+      closeItemModal()
+    } catch (err) {
+      console.error('Item create failed:', err)
+      alert(err?.data?.message || err?.data?.detail || 'Could not create item.')
+    }
   }
 
   const totalQty = lineItems.reduce((sum, line) => sum + (Number(line.qty) || 0), 0)
@@ -160,22 +306,22 @@ export default function PurchaseNew() {
     <div className="purchase-new-page">
       <header className="purchase-new-header">
         <div className="purchase-new-header-left">
-          <span className="purchase-new-title">Purchase #1</span>
-          <Link to="/purchase" className="icon-btn" aria-label="Close">
+          {/* <span className="purchase-new-title">Purchase {pInvNo}</span> */}
+          {/* <Link to="/purchase" className="icon-btn" aria-label="Close">
             <X size={20} />
           </Link>
           <Link to="/purchase/new" className="icon-btn" aria-label="New purchase">
             <Plus size={20} />
-          </Link>
+          </Link> */}
         </div>
         <h1 className="purchase-new-heading">Purchase</h1>
         <div className="purchase-new-header-right">
-          <button type="button" className="icon-btn" aria-label="Calculator">
+          {/* <button type="button" className="icon-btn" aria-label="Calculator">
             <Calculator size={18} />
           </button>
           <button type="button" className="icon-btn" aria-label="Settings">
             <Settings size={18} />
-          </button>
+          </button> */}
           <Link to="/purchase" className="icon-btn" aria-label="Close">
             <X size={20} />
           </Link>
@@ -188,7 +334,7 @@ export default function PurchaseNew() {
             <label>Party <span className="required">*</span></label>
             <select
               value={prhid}
-              onChange={(e) => setPrhid(e.target.value)}
+              onChange={(e) => handlePartyChange(e.target.value)}
               className="form-input"
               required
             >
@@ -198,6 +344,7 @@ export default function PurchaseNew() {
                   {c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`}
                 </option>
               ))}
+              <option value="__add__">+ Add new party</option>
             </select>
           </div>
           <div className="form-group">
@@ -280,6 +427,7 @@ export default function PurchaseNew() {
                           {it.item_name ?? it.item ?? `Item ${it.item_id ?? it.id}`}
                         </option>
                       ))}
+                      <option value="__add__">+ Add new item</option>
                     </select>
                   </td>
                   <td>
@@ -444,6 +592,158 @@ export default function PurchaseNew() {
           </div>
         </div>
       </div>
+
+      {showItemModal && (
+        <div className="modal-overlay" onClick={closeItemModal}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Add Item</span>
+              <button type="button" className="icon-btn" onClick={closeItemModal} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Item Name <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={newItemForm.item_name}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, item_name: e.target.value }))}
+                  className="form-input"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>HSN Code <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={newItemForm.hsncode}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, hsncode: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>Rate (₹)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newItemForm.rate}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, rate: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>GST %</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newItemForm.gst}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, gst: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <input
+                  type="text"
+                  value={newItemForm.description}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, description: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closeItemModal} disabled={isCreatingItem}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleCreateItem} disabled={isCreatingItem}>
+                {isCreatingItem ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPartyModal && (
+        <div className="modal-overlay" onClick={closePartyModal}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Add Party</span>
+              <button type="button" className="icon-btn" onClick={closePartyModal} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Party Name <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={newPartyForm.partyname}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, partyname: e.target.value }))}
+                  className="form-input"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>Mobile No <span className="required">*</span></label>
+                <input
+                  type="tel"
+                  value={newPartyForm.mobno}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, mobno: e.target.value }))}
+                  className="form-input"
+                  placeholder="10-digit mobile number"
+                />
+              </div>
+              <div className="form-group">
+                <label>City</label>
+                <input
+                  type="text"
+                  value={newPartyForm.city}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, city: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>State</label>
+                <input
+                  type="text"
+                  value={newPartyForm.state}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, state: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group form-row-check">
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    checked={newPartyForm.gst_reg}
+                    onChange={(e) => setNewPartyForm((p) => ({ ...p, gst_reg: e.target.checked }))}
+                  />
+                  <span>GST Registered</span>
+                </label>
+              </div>
+              <div className="form-group form-row-check">
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    checked={newPartyForm.same_state}
+                    onChange={(e) => setNewPartyForm((p) => ({ ...p, same_state: e.target.checked }))}
+                  />
+                  <span>Same State</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closePartyModal} disabled={isCreatingParty}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleCreateParty} disabled={isCreatingParty}>
+                {isCreatingParty ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
