@@ -36,10 +36,11 @@ export default function PurchaseNew() {
   const [roundOff, setRoundOff] = useState(true)
   const [roundOffValue, setRoundOffValue] = useState(0)
   const [refno, setRefno] = useState('')
-  const [payby, setPayby] = useState(1)
+  const [payby, setPayby] = useState('')
 
   const { data: customersData } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
+  const paybyAccounts = customersData?.payby ?? []
   const { data: itemsData } = useGetItemsQuery(undefined, { skip: false })
   const items = itemsData?.data ?? []
   const [createPurchaseOrder, { isLoading: isSaving }] = useCreatePurchaseOrderMutation()
@@ -125,17 +126,19 @@ export default function PurchaseNew() {
     const cgstAmt = sameState ? Math.round(totalTax / 2) : 0
     const sgstAmt = sameState ? Math.round(totalTax / 2) : 0
     const igstAmt = sameState ? 0 : Math.round(totalTax)
+    const taxableAmt = Math.max(0, Math.round(totalBeforeRound - totalTax))
     const payload = {
       p_inv_no: pInvNo.trim(),
       dt: billDate,
       state: stateOfSupply.trim(),
       payment: Math.round(Number(total) || 0),
       prhid: Number(prhid) || 0,
-      gst: 18,
+      gst: cgstAmt + sgstAmt + igstAmt,
+      taxable_amt: taxableAmt,
       cgst: cgstAmt,
       sgst: sgstAmt,
       igst: igstAmt,
-      payby: Number(payby) || 1,
+      payby: payby !== '' ? Number(payby) : undefined,
       refno: refno.trim() || undefined,
       item_id: (() => {
         const ids = lineItems
@@ -384,9 +387,12 @@ export default function PurchaseNew() {
             <div className="form-group">
               <label>Payment Type</label>
               <select value={payby} onChange={(e) => setPayby(e.target.value)} className="form-input">
-                <option value={1}>Cash/Other</option>
-                <option value={2}>Card</option>
-                <option value={3}>UPI</option>
+                <option value="">Select Pay By</option>
+                {paybyAccounts.map((p) => (
+                  <option key={p.pbid ?? p.id} value={p.pbid ?? p.id}>
+                    {p.name ?? `PayBy ${p.pbid ?? p.id}`}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="form-group">
@@ -399,7 +405,7 @@ export default function PurchaseNew() {
                 placeholder="Ref no"
               />
             </div>
-            <button type="button" className="btn-link">+ Add Payment type</button>
+            {/* <button type="button" className="btn-link">+ Add Payment type</button>
             <button type="button" className="btn-outline">
               <FileText size={14} />
               ADD DESCRIPTION
@@ -407,7 +413,7 @@ export default function PurchaseNew() {
             <button type="button" className="btn-outline">
               <Upload size={14} />
               Upload Bill
-            </button>
+            </button> */}
           </div>
           <div className="footer-right">
             <div className="total-row">

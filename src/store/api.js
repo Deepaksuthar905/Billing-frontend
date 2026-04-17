@@ -163,7 +163,15 @@ export const billingApi = createApi({
         if (prtytyp !== undefined) params.set('prtytyp', prtytyp)
         return { url: params.toString() ? `/customers?${params}` : '/customers' }
       },
-      transformResponse: normalizeList,
+      transformResponse: (response) => {
+        // Keep extra keys (e.g. { payby: [...] }) while still normalizing list shape.
+        if (Array.isArray(response)) return { data: response }
+        if (response && typeof response === 'object') {
+          const normalized = normalizeList(response)
+          return { ...response, data: normalized.data ?? [] }
+        }
+        return normalizeList(response)
+      },
       providesTags: (result) =>
         result?.data
           ? [...result.data.map(({ id }) => ({ type: 'Customer', id })), 'Customer']

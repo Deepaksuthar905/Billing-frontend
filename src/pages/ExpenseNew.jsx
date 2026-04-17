@@ -43,8 +43,9 @@ export default function ExpenseNew() {
   const { data: headsData } = useGetExpenseHeadsQuery(undefined, { refetchOnMountOrArgChange: 120 })
   const expenseHeads = headsData?.data ?? []
 
-  const { data: customersData } = useGetCustomersQuery(undefined, { skip: false })
+  const { data: customersData } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
+  const paybyAccounts = customersData?.payby ?? []
 
   const [createExpenseHead, { isLoading: isSavingHead }] = useCreateExpenseHeadMutation()
   const [createExpense, { isLoading: isSaving }] = useCreateExpenseMutation()
@@ -116,11 +117,12 @@ export default function ExpenseNew() {
 
     const payload = {
       exhid: Number(expHeadId),
+      receipt_no: expNo.trim() || undefined,
       description: description || undefined,
       payment: Math.round(total),
       dt: expDate,
       party: pid ? Number(pid) : undefined,
-      payby: Number(payby),
+      payby: payby !== '' ? Number(payby) : undefined,
       refno: refno.trim() || undefined,
     }
     try {
@@ -137,22 +139,22 @@ export default function ExpenseNew() {
       {/* ── Header ── */}
       <header className="exp-new-header">
         <div className="exp-new-header-left">
-          <span className="exp-new-title">Expense #{expNo || '—'}</span>
-          <Link to="/expenses" className="icon-btn" aria-label="Close">
+          {/* <span className="exp-new-title">Expense {expNo}</span> */}
+          {/* <Link to="/expenses" className="icon-btn" aria-label="Close">
             <X size={20} />
-          </Link>
-          <Link to="/expenses/new" className="icon-btn" aria-label="New expense">
+          </Link> */}
+          {/* <Link to="/expenses/new" className="icon-btn" aria-label="New expense">
             <Plus size={20} />
-          </Link>
+          </Link> */}
         </div>
         <h1 className="exp-new-heading">Expense</h1>
         <div className="exp-new-header-right">
-          <button type="button" className="icon-btn" aria-label="Calculator">
+          {/* <button type="button" className="icon-btn" aria-label="Calculator">
             <Calculator size={18} />
           </button>
           <button type="button" className="icon-btn" aria-label="Settings">
             <Settings size={18} />
-          </button>
+          </button> */}
           <Link to="/expenses" className="icon-btn" aria-label="Close">
             <X size={20} />
           </Link>
@@ -194,7 +196,7 @@ export default function ExpenseNew() {
           </div>
           <div className="exp-form-top-right">
             <div className="form-group exp-no-group">
-              <label>Expense No</label>
+              <label>Receipt No</label>
               <input
                 type="text"
                 value={expNo}
@@ -326,13 +328,15 @@ export default function ExpenseNew() {
                 onChange={(e) => setPayby(e.target.value)}
                 className="form-input"
               >
-                <option value={0}>Cash</option>
-                <option value={1}>Bank</option>
-                <option value={2}>UPI</option>
-                <option value={3}>Cheque</option>
+                <option value="">Select Pay By</option>
+                {paybyAccounts.map((p) => (
+                  <option key={p.pbid ?? p.id} value={p.pbid ?? p.id}>
+                    {p.name ?? `PayBy ${p.pbid ?? p.id}`}
+                  </option>
+                ))}
               </select>
             </div>
-            <div className="form-group">
+            {/* <div className="form-group">
               <input
                 type="text"
                 value={refno}
@@ -340,11 +344,11 @@ export default function ExpenseNew() {
                 className="form-input"
                 placeholder="Reference No."
               />
-            </div>
-            <button type="button" className="btn-outline">
+            </div> */}
+            {/* <button type="button" className="btn-outline">
               <FileText size={14} />
               ADD DESCRIPTION
-            </button>
+            </button> */}
           </div>
 
           <div className="footer-right">
