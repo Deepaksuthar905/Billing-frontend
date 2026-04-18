@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { getAuthToken } from '../lib/authToken'
 
 /** Live Laravel API; override with VITE_API_BASE_URL for local (e.g. http://127.0.0.1:8000/api) */
 const DEFAULT_API_BASE = 'https://superplayerauction.com/billing/api'
@@ -58,15 +59,27 @@ export const billingApi = createApi({
   reducerPath: 'billingApi',
   baseQuery: fetchBaseQuery({
     baseUrl,
-    prepareHeaders: (headers) => {
+    prepareHeaders: (headers, { endpoint }) => {
       headers.set('Content-Type', 'application/json')
-      // Agar auth use karte ho to: const token = getState().auth?.token; if (token) headers.set('Authorization', `Bearer ${token}`)
+      /** Do not send Bearer on `/login` — avoids stale token breaking auth. */
+      if (endpoint !== 'login') {
+        const token = getAuthToken()
+        if (token) headers.set('Authorization', `Bearer ${token}`)
+      }
       return headers
     },
   }),
   tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
+    login: builder.mutation({
+      query: ({ email, password }) => ({
+        url: '/login',
+        method: 'POST',
+        body: { email, password },
+      }),
+    }),
+
     // Dashboard – ek hi call, sab stats + recent lists
     getDashboard: builder.query({
       query: () => ({ url: '/dashboard', method: 'GET' }),
@@ -313,6 +326,7 @@ export const billingApi = createApi({
 })
 
 export const {
+  useLoginMutation,
   useGetDashboardQuery,
   useGetPayByListQuery,
   useGetInvoicesQuery,
