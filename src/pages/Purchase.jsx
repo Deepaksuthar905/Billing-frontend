@@ -37,7 +37,12 @@ export default function Purchase() {
     const amountOrTotal = po.amount ?? po.total
     return {
       ...po,
-      totalFormatted: typeof amountOrTotal === 'number' ? formatCurrency(amountOrTotal) : (amountOrTotal != null ? String(amountOrTotal) : '—'),
+      totalFormatted:
+        typeof amountOrTotal === 'number'
+          ? formatCurrency(amountOrTotal, 2)
+          : amountOrTotal != null
+            ? String(amountOrTotal)
+            : '—',
       dateFormatted: formatDate(po.date),
       p_inv_no: po.p_inv_no ?? '—',
       statusDisplay: (po.status || '').charAt(0).toUpperCase() + (po.status || '').slice(1).toLowerCase(),

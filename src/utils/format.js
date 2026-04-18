@@ -1,11 +1,23 @@
-/** API se number aata hai, display ke liye ₹ format */
-export function formatCurrency(num) {
-  if (num == null) return '₹0'
+/**
+ * INR display. `fractionDigits` optional — default 0 keeps existing screens unchanged.
+ * Use `fractionDigits: 2` where rupee paisa should show (e.g. purchase line items).
+ */
+export function formatCurrency(num, fractionDigits = 0) {
+  const n = Number(num)
+  if (num == null || Number.isNaN(n)) {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(0)
+  }
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(num)
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(n)
 }
 
 /** API date "2025-03-16" → "16 Mar 2025" */

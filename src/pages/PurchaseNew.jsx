@@ -53,7 +53,7 @@ function nestedItemFromPo(po) {
  * Root `gst` is often **tax amount (₹)**; nested `item_id.gst` is **GST %**.
  */
 function lineFromPurchasePo(po) {
-  const payment = Math.round(Number(po.payment ?? po.amount) || 0)
+  const payment = round2(Number(po.payment ?? po.amount) || 0)
   const inv = nestedItemFromPo(po)
   const nestedGst = inv != null ? Number(inv.gst) : NaN
   const rootGst = Number(po.gst)
@@ -78,7 +78,7 @@ function lineFromPurchasePo(po) {
     description = inv.description != null ? String(inv.description).trim() : ''
     const rate = Number(inv.rate)
     if (!Number.isNaN(rate) && rate > 0) {
-      const lineGross = Math.round(rate * qty)
+      const lineGross = round2(rate * qty)
       const diff = Math.abs(lineGross - payment)
       /** Use catalog rate when it matches bill total; else use bill amount as inclusive line gross */
       price = diff <= 2 ? rate : payment
@@ -183,16 +183,16 @@ export default function PurchaseNew() {
     const taxPct = Number(line.taxPct) || 18
     const isWithTax = type === PRICE_TYPE_WITH_TAX
     if (isWithTax) {
-      const amount = qty * price
+      const amount = round2(qty * price)
       const taxAmt = taxPct > 0 ? round2((amount * taxPct) / (100 + taxPct)) : 0
       return { ...line, taxAmt, amount }
     }
     const discountPct = Number(line.discountPct) || 0
-    const subtotal = qty * price
-    const discountAmt = (subtotal * discountPct) / 100
-    const afterDiscount = Math.max(0, subtotal - discountAmt)
+    const subtotal = round2(qty * price)
+    const discountAmt = round2((subtotal * discountPct) / 100)
+    const afterDiscount = Math.max(0, round2(subtotal - discountAmt))
     const taxAmt = round2((afterDiscount * taxPct) / 100)
-    return { ...line, discountAmt, taxAmt, amount: Math.max(0, afterDiscount + taxAmt) }
+    return { ...line, discountAmt, taxAmt, amount: round2(Math.max(0, afterDiscount + taxAmt)) }
   }
 
   useEffect(() => {
@@ -413,11 +413,11 @@ export default function PurchaseNew() {
     }
   }
 
-  const totalQty = lineItems.reduce((sum, line) => sum + (Number(line.qty) || 0), 0)
-  const totalDiscount = lineItems.reduce((sum, line) => sum + (Number(line.discountAmt) || 0), 0)
-  const totalTax = lineItems.reduce((sum, line) => sum + (Number(line.taxAmt) || 0), 0)
-  const totalBeforeRound = lineItems.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
-  const total = totalBeforeRound + (roundOff ? (Number(roundOffValue) || 0) : 0)
+  const totalQty = round2(lineItems.reduce((sum, line) => sum + (Number(line.qty) || 0), 0))
+  const totalDiscount = round2(lineItems.reduce((sum, line) => sum + (Number(line.discountAmt) || 0), 0))
+  const totalTax = round2(lineItems.reduce((sum, line) => sum + (Number(line.taxAmt) || 0), 0))
+  const totalBeforeRound = round2(lineItems.reduce((sum, line) => sum + (Number(line.amount) || 0), 0))
+  const total = round2(totalBeforeRound + (roundOff ? Number(roundOffValue) || 0 : 0))
 
   const handleSave = async () => {
     if (!prhid) {
@@ -425,17 +425,19 @@ export default function PurchaseNew() {
       return
     }
     const sameState = stateOfSupply && stateOfSupply.trim() === BUSINESS_STATE
-    const cgstAmt = sameState ? Math.round(totalTax / 2) : 0
-    const sgstAmt = sameState ? Math.round(totalTax / 2) : 0
-    const igstAmt = sameState ? 0 : Math.round(totalTax)
-    const taxableAmt = Math.max(0, Math.round(totalBeforeRound - totalTax))
+    const halfTax = sameState ? round2(totalTax / 2) : 0
+    const cgstAmt = sameState ? halfTax : 0
+    const sgstAmt = sameState ? round2(totalTax - halfTax) : 0
+    const igstAmt = sameState ? 0 : round2(totalTax)
+    const taxableAmt = round2(Math.max(0, totalBeforeRound - totalTax))
+    const gstTotal = round2(cgstAmt + sgstAmt + igstAmt)
     const payload = {
       p_inv_no: pInvNo.trim(),
       dt: billDate,
       state: stateOfSupply.trim(),
-      payment: Math.round(Number(total) || 0),
+      payment: round2(Number(total) || 0),
       prhid: Number(prhid) || 0,
-      gst: cgstAmt + sgstAmt + igstAmt,
+      gst: gstTotal,
       taxable_amt: taxableAmt,
       cgst: cgstAmt,
       sgst: sgstAmt,
@@ -612,6 +614,7 @@ export default function PurchaseNew() {
                     <input
                       type="number"
                       min="0"
+                      step="0.001"
                       value={line.qty}
                       onChange={(e) => updateLineItem(index, 'qty', e.target.value)}
                       className="form-input input-sm"
@@ -660,8 +663,8 @@ export default function PurchaseNew() {
                       className="form-input input-sm"
                     />
                   </td>
-                  <td className="amount-cell">{formatCurrency(line.taxAmt)}</td>
-                  <td className="amount-cell">{formatCurrency(line.amount)}</td>
+                  <td className="amount-cell">{formatCurrency(line.taxAmt, 2)}</td>
+                  <td className="amount-cell">{formatCurrency(line.amount, 2)}</td>
                   <td>
                     <button type="button" className="btn-remove-row" onClick={() => removeRow(index)} aria-label="Remove row">
                       <X size={14} />
@@ -674,12 +677,12 @@ export default function PurchaseNew() {
               <tr className="totals-row">
                 <td></td>
                 <td colSpan="3">Total</td>
-                <td>{totalQty}</td>
+                <td>{round2(totalQty)}</td>
                 <td colSpan="2"></td>
                 {/* <td>{formatCurrency(totalDiscount)}</td> */}
                 <td></td>
-                <td>{formatCurrency(totalTax)}</td>
-                <td>{formatCurrency(totalBeforeRound)}</td>
+                <td>{formatCurrency(totalTax, 2)}</td>
+                <td>{formatCurrency(totalBeforeRound, 2)}</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -739,7 +742,7 @@ export default function PurchaseNew() {
             </div>
             <div className="total-row total-final">
               <span>Total</span>
-              <strong>{formatCurrency(total)}</strong>
+              <strong>{formatCurrency(total, 2)}</strong>
             </div>
             <div className="footer-actions">
               <button type="button" className="btn btn-secondary">
