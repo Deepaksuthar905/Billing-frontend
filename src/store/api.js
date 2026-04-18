@@ -128,9 +128,22 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'PurchaseOrder', id })), 'PurchaseOrder']
           : ['PurchaseOrder'],
     }),
+    getPurchaseById: builder.query({
+      query: (prid) => ({ url: `/purchases/${prid}` }),
+      transformResponse: (r) => {
+        if (!r || typeof r !== 'object') return null
+        if (r.data && typeof r.data === 'object' && !Array.isArray(r.data)) return r.data
+        return r
+      },
+      providesTags: (_r, _e, prid) => [{ type: 'PurchaseOrder', id: prid }, 'PurchaseOrder'],
+    }),
     createPurchaseOrder: builder.mutation({
       query: (body) => ({ url: '/purchases', method: 'POST', body }),
       invalidatesTags: ['PurchaseOrder', 'Dashboard', 'Vendor'],
+    }),
+    updatePurchaseOrder: builder.mutation({
+      query: ({ prid, ...body }) => ({ url: `/purchases/${prid}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { prid }) => [{ type: 'PurchaseOrder', id: prid }, 'PurchaseOrder', 'Dashboard', 'Vendor'],
     }),
     deletePurchaseOrder: builder.mutation({
       query: (id) => ({ url: `/delpurchase/${id}`, method: 'POST' }),
@@ -295,7 +308,9 @@ export const {
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
   useGetPurchaseOrdersQuery,
+  useGetPurchaseByIdQuery,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
   useDeletePurchaseOrderMutation,
   useGetGstRateReportQuery,
   useGetVendorsQuery,

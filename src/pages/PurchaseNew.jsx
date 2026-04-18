@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { X, Plus, Calculator, Settings, FileText, Upload } from 'lucide-react'
 import {
   useGetCustomersQuery,
@@ -7,6 +7,8 @@ import {
   useGetItemsQuery,
   useCreateItemMutation,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
+  useGetPurchaseByIdQuery,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
 import { INDIA_STATES } from '../utils/indiaStates'
@@ -32,8 +34,85 @@ const emptyLineItem = () => ({
   amount: 0,
 })
 
+function dtToYmdPurchase(dt) {
+  if (!dt) return new Date().toISOString().slice(0, 10)
+  const d = new Date(dt)
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Nested item object from list/detail API (`item_id: { item_id, item_name, ... }`). */
+function nestedItemFromPo(po) {
+  const raw = po?.item_id
+  if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) return raw
+  return null
+}
+
+/**
+ * Build first line from API purchase row.
+ * Root `gst` is often **tax amount (₹)**; nested `item_id.gst` is **GST %**.
+ */
+function lineFromPurchasePo(po) {
+  const payment = Math.round(Number(po.payment ?? po.amount) || 0)
+  const inv = nestedItemFromPo(po)
+  const nestedGst = inv != null ? Number(inv.gst) : NaN
+  const rootGst = Number(po.gst)
+  const taxPct =
+    inv != null && !Number.isNaN(nestedGst) && nestedGst > 0 && nestedGst <= 100
+      ? nestedGst
+      : rootGst > 0 && rootGst <= 100
+        ? rootGst
+        : 18
+
+  let itemId = ''
+  let item = String(po.items ?? '').trim()
+  let hsnCode = ''
+  let description = ''
+  const qty = 1
+  let price = payment
+
+  if (inv != null) {
+    itemId = inv.item_id != null ? String(inv.item_id) : ''
+    item = String(inv.item_name ?? inv.item ?? item ?? '').trim()
+    hsnCode = String(inv.hsncode ?? inv.hsnCode ?? '').trim()
+    description = inv.description != null ? String(inv.description).trim() : ''
+    const rate = Number(inv.rate)
+    if (!Number.isNaN(rate) && rate > 0) {
+      const lineGross = Math.round(rate * qty)
+      const diff = Math.abs(lineGross - payment)
+      /** Use catalog rate when it matches bill total; else use bill amount as inclusive line gross */
+      price = diff <= 2 ? rate : payment
+    }
+  } else if (po.item_id != null && po.item_id !== '' && typeof po.item_id !== 'object') {
+    itemId = String(po.item_id)
+  }
+
+  return {
+    itemId,
+    item,
+    hsnCode,
+    description,
+    qty,
+    unit: 'NONE',
+    price,
+    discountPct: 0,
+    discountAmt: 0,
+    taxPct,
+    taxAmt: 0,
+    amount: 0,
+  }
+}
+
 export default function PurchaseNew() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const pridFromUrl = searchParams.get('prid')
+  const purchaseFromNav = location.state?.purchase
+  const hydratedPridRef = useRef(null)
+  /** Tracks last `prhid` so we only default "State of Vendor" when the party selection changes. */
+  const prevPrhidForVendorStateRef = useRef(undefined)
+  const [editingPrid, setEditingPrid] = useState(null)
   const [prhid, setPrhid] = useState('')
   const [pInvNo, setPInvNo] = useState('')
   const [billDate, setBillDate] = useState(new Date().toISOString().slice(0, 10))
@@ -69,10 +148,34 @@ export default function PurchaseNew() {
   const { data: itemsData, refetch: refetchItems } = useGetItemsQuery(undefined, { skip: false })
   const items = itemsData?.data ?? []
   const [createPurchaseOrder, { isLoading: isSaving }] = useCreatePurchaseOrderMutation()
+  const [updatePurchaseOrder, { isLoading: isUpdating }] = useUpdatePurchaseOrderMutation()
+  const { data: purchaseFetched, isLoading: purchaseDetailLoading } = useGetPurchaseByIdQuery(pridFromUrl, {
+    skip: !pridFromUrl || Boolean(purchaseFromNav),
+  })
   const [createItem, { isLoading: isCreatingItem }] = useCreateItemMutation()
   const [createCustomer, { isLoading: isCreatingParty }] = useCreateCustomerMutation()
 
   const selectedParty = parties.find((c) => String(c.pid ?? c.id) === String(prhid))
+
+  /** When party changes, default state of supply to that party's `state` (still editable). */
+  useEffect(() => {
+    const pid = prhid ? String(prhid) : ''
+    if (!parties.length) return
+    if (!pid) {
+      prevPrhidForVendorStateRef.current = pid
+      return
+    }
+    const selectionChanged = prevPrhidForVendorStateRef.current !== pid
+    prevPrhidForVendorStateRef.current = pid
+    if (!selectionChanged) return
+
+    const party = parties.find((c) => String(c.pid ?? c.id) === pid)
+    const raw = party?.state != null ? String(party.state).trim() : ''
+    if (!raw) return
+    const normalized =
+      INDIA_STATES.find((s) => s.toLowerCase() === raw.toLowerCase()) ?? raw
+    setStateOfSupply(normalized)
+  }, [prhid, parties])
 
   const recalcLineAmount = (line, type) => {
     const qty = Number(line.qty) || 0
@@ -91,6 +194,58 @@ export default function PurchaseNew() {
     const taxAmt = round2((afterDiscount * taxPct) / 100)
     return { ...line, discountAmt, taxAmt, amount: Math.max(0, afterDiscount + taxAmt) }
   }
+
+  useEffect(() => {
+    const po = purchaseFromNav ?? purchaseFetched
+    const prid = po?.prid ?? po?.id
+    if (!prid) return
+    if (hydratedPridRef.current === prid) return
+    hydratedPridRef.current = prid
+    setEditingPrid(prid)
+    setPrhid(po.prhid != null && po.prhid !== '' ? String(po.prhid) : '')
+    setPInvNo(po.p_inv_no != null ? String(po.p_inv_no) : '')
+    setBillDate(dtToYmdPurchase(po.dt ?? po.date))
+    setStateOfSupply(po.state != null && po.state !== '' ? String(po.state) : '')
+    setRefno(po.refno != null ? String(po.refno) : '')
+    setPayby(po.payby !== undefined && po.payby !== null ? String(po.payby) : '')
+    setRoundOff(false)
+    setRoundOffValue(0)
+    setPriceType(PRICE_TYPE_WITH_TAX)
+    const line = lineFromPurchasePo(po)
+    setLineItems([recalcLineAmount(line, PRICE_TYPE_WITH_TAX)])
+  }, [purchaseFromNav, purchaseFetched])
+
+  /** List payload often has `vendor` name but no `prhid` — match party after vendors load. */
+  useEffect(() => {
+    if (!editingPrid || prhid) return
+    const po = purchaseFromNav ?? purchaseFetched
+    if (!po || !parties.length) return
+    const name = String(po.vendor ?? po.vendor_name ?? '').trim()
+    if (!name) return
+    const match = parties.find((p) => String(p.partyname ?? p.name ?? '').trim() === name)
+    if (!match) return
+    setPrhid(String(match.pid ?? match.id))
+    if ((!po.state || String(po.state).trim() === '') && match.state) {
+      setStateOfSupply(String(match.state))
+    }
+  }, [editingPrid, prhid, purchaseFromNav, purchaseFetched, parties])
+
+  useEffect(() => {
+    if (pridFromUrl || purchaseFromNav) return
+    if (hydratedPridRef.current === null) return
+    hydratedPridRef.current = null
+    setEditingPrid(null)
+    setPrhid('')
+    setPInvNo('')
+    setBillDate(new Date().toISOString().slice(0, 10))
+    setStateOfSupply('')
+    setRefno('')
+    setPayby('')
+    setLineItems([emptyLineItem()])
+    setRoundOff(true)
+    setRoundOffValue(0)
+    setPriceType(PRICE_TYPE_WITH_TAX)
+  }, [pridFromUrl, purchaseFromNav])
 
   const updateLineItem = (index, field, value) => {
     setLineItems((prev) => {
@@ -295,10 +450,14 @@ export default function PurchaseNew() {
       })(),
     }
     try {
-      await createPurchaseOrder(payload).unwrap()
+      if (editingPrid != null) {
+        await updatePurchaseOrder({ prid: editingPrid, ...payload }).unwrap()
+      } else {
+        await createPurchaseOrder(payload).unwrap()
+      }
       navigate('/purchase')
     } catch (err) {
-      console.error('Create purchase failed:', err)
+      console.error(editingPrid != null ? 'Update purchase failed:' : 'Create purchase failed:', err)
       alert(err?.data?.message || err?.data?.detail || 'Could not save purchase.')
     }
   }
@@ -315,7 +474,7 @@ export default function PurchaseNew() {
             <Plus size={20} />
           </Link> */}
         </div>
-        <h1 className="purchase-new-heading">Purchase</h1>
+        <h1 className="purchase-new-heading">{editingPrid != null ? 'Edit purchase' : 'Purchase'}</h1>
         <div className="purchase-new-header-right">
           {/* <button type="button" className="icon-btn" aria-label="Calculator">
             <Calculator size={18} />
@@ -368,7 +527,7 @@ export default function PurchaseNew() {
             />
           </div>
           <div className="form-group">
-            <label>State of supply</label>
+            <label>State of Vendor</label>
             <select
               value={stateOfSupply}
               onChange={(e) => setStateOfSupply(e.target.value)}
@@ -586,8 +745,21 @@ export default function PurchaseNew() {
               <button type="button" className="btn btn-secondary">
                 Share
               </button>
-              <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save'}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={
+                  isSaving ||
+                  isUpdating ||
+                  (Boolean(pridFromUrl) && !purchaseFromNav && purchaseDetailLoading)
+                }
+              >
+                {isSaving || isUpdating
+                  ? 'Saving...'
+                  : purchaseDetailLoading && pridFromUrl && !purchaseFromNav
+                    ? 'Loading...'
+                    : 'Save'}
               </button>
             </div>
           </div>

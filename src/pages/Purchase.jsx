@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Package, Users, Trash2 } from 'lucide-react'
+import { Plus, Search, Filter, Package, Users, Trash2, Edit } from 'lucide-react'
 import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation, useDeletePurchaseOrderMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Purchase.css'
@@ -120,7 +120,7 @@ export default function Purchase() {
               </thead>
               <tbody>
                 {purchaseOrders.map((po, index) => (
-                  <tr key={po.id}>
+                  <tr key={po.prid ?? po.id ?? index}>
                     {/* <td className="font-medium">{po.id}</td> */}
                     <td className="font-medium">{index + 1}</td>
                     <td>{po.p_inv_no ?? '—'}</td>
@@ -135,7 +135,14 @@ export default function Purchase() {
                     </td>
                     <td>
                       <div className="action-btns">
-                        <button type="button" className="btn-icon">→</button>
+                        <Link
+                          to={`/purchase/new?prid=${po.prid ?? po.id}`}
+                          state={{ purchase: po }}
+                          className="btn-icon"
+                          aria-label="Edit purchase"
+                        >
+                          <Edit size={15} />
+                        </Link>
                         <button
                           type="button"
                           className="btn-icon btn-icon--danger"
