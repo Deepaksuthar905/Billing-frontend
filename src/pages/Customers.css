@@ -2,6 +2,44 @@
   margin-bottom: 1rem;
 }
 
+.customers-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.customers-page .party-kind-tabs {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.customers-page .party-kind-tab {
+  padding: 0.45rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.customers-page .party-kind-tab:hover {
+  color: var(--text-heading);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.customers-page .party-kind-tab--active {
+  background: var(--card-bg);
+  color: var(--primary);
+  box-shadow: 0 1px 0 var(--border);
+}
+
 .customers-page .search-box {
   max-width: 320px;
   position: relative;

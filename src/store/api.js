@@ -173,7 +173,10 @@ export const billingApi = createApi({
         const search = typeof arg === 'string' ? arg : arg?.search
         const prtytyp = typeof arg === 'object' && arg?.prtytyp !== undefined ? arg.prtytyp : undefined
         if (search) params.set('search', search)
-        if (prtytyp !== undefined) params.set('prtytyp', prtytyp)
+        /** Only send `prtytyp` for vendors (`1`). Never send `prtytyp=0` — customers use plain `/customers`. */
+        if (prtytyp !== undefined && prtytyp !== null && prtytyp !== '' && Number(prtytyp) === 1) {
+          params.set('prtytyp', '1')
+        }
         return { url: params.toString() ? `/customers?${params}` : '/customers' }
       },
       transformResponse: (response) => {
@@ -193,6 +196,16 @@ export const billingApi = createApi({
     createCustomer: builder.mutation({
       query: (body) => ({ url: '/parties', method: 'POST', body }),
       invalidatesTags: ['Customer'],
+    }),
+    updateCustomer: builder.mutation({
+      query: ({ pid, id, ...body }) => {
+        const partyId = pid ?? id
+        return { url: `/parties/${partyId}`, method: 'PUT', body }
+      },
+      invalidatesTags: (_r, _e, arg) => {
+        const listId = arg?.pid ?? arg?.id
+        return listId != null ? [{ type: 'Customer', id: listId }, 'Customer'] : ['Customer']
+      },
     }),
 
     // Items / Inventory
@@ -316,6 +329,7 @@ export const {
   useGetVendorsQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
+  useUpdateCustomerMutation,
   useGetItemsQuery,
   useCreateItemMutation,
   useUpdateItemMutation,

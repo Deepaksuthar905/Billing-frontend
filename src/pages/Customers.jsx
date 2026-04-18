@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Plus, Search, Phone, X } from 'lucide-react'
-import { useGetCustomersQuery, useCreateCustomerMutation } from '../store/api'
+import { Plus, Search, Phone, X, Edit } from 'lucide-react'
+import { useGetCustomersQuery, useCreateCustomerMutation, useUpdateCustomerMutation } from '../store/api'
 import { formatCurrency } from '../utils/format'
 import { INDIA_STATES } from '../utils/indiaStates'
 import './Customers.css'
@@ -15,21 +15,40 @@ const initialForm = {
   mobno: '',
   city: '',
   state: '',
+  gst_no: '',
   gst_reg: 1,
   same_state: 1,
 }
 
+function rowToForm(c) {
+  return {
+    partyname: (c.partyname ?? c.name ?? '').trim(),
+    mobno: (c.mobno ?? c.phone ?? '').trim(),
+    city: (c.city ?? '').trim(),
+    state: (c.state ?? '').trim(),
+    gst_no: (c.gst_no ?? c.gstin ?? '').trim(),
+    gst_reg: c.gst_reg === true || c.gst_reg === 1 ? 1 : 0,
+    same_state: c.same_state === true || c.same_state === 1 ? 1 : 0,
+  }
+}
+
 export default function Customers() {
+  const [partyKind, setPartyKind] = useState('customer')
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [viewCustomer, setViewCustomer] = useState(null)
+  const [editingPid, setEditingPid] = useState(null)
   const [form, setForm] = useState(initialForm)
 
-  const { data, isLoading, isError } = useGetCustomersQuery(
-    { search: search || undefined, prtytyp: 0 },
-    { refetchOnMountOrArgChange: 120 }
-  )
+  const customerQueryArg =
+    partyKind === 'vendor'
+      ? { search: search || undefined, prtytyp: 1 }
+      : { search: search || undefined }
+
+  const { data, isLoading, isError } = useGetCustomersQuery(customerQueryArg, {
+    refetchOnMountOrArgChange: 120,
+  })
   const [createCustomer, { isLoading: isCreating }] = useCreateCustomerMutation()
+  const [updateCustomer, { isLoading: isUpdating }] = useUpdateCustomerMutation()
 
   const list = (isError || !data?.data ? fallbackCustomers : data.data).map((c) => ({
     ...c,
@@ -47,45 +66,87 @@ export default function Customers() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const payload = {
+      partyname: form.partyname.trim(),
+      mobno: form.mobno.trim(),
+      city: form.city.trim(),
+      state: form.state.trim(),
+      gst_reg: Number(form.gst_reg) || 0,
+      same_state: Number(form.same_state) || 0,
+      ...(partyKind === 'vendor' ? { prtytyp: 1 } : {}),
+    }
+    if (editingPid != null) {
+      payload.gst_no = form.gst_no.trim() || null
+    } else if (form.gst_no.trim()) {
+      payload.gst_no = form.gst_no.trim()
+    }
     try {
-      await createCustomer({
-        partyname: form.partyname.trim(),
-        mobno: form.mobno.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        gst_reg: Number(form.gst_reg) || 0,
-        same_state: Number(form.same_state) || 0,
-        prtytyp: 0,
-      }).unwrap()
+      if (editingPid != null) {
+        await updateCustomer({ pid: editingPid, ...payload }).unwrap()
+      } else {
+        await createCustomer(payload).unwrap()
+      }
       setForm(initialForm)
+      setEditingPid(null)
       setModalOpen(false)
     } catch (err) {
-      console.error('Create customer failed:', err)
-      alert(err?.data?.message || err?.data?.detail || 'Could not add customer. Please try again.')
+      console.error(editingPid != null ? 'Update failed:' : 'Create failed:', err)
+      alert(err?.data?.message || err?.data?.detail || 'Could not save. Please try again.')
     }
   }
 
   const handleClose = () => {
     setForm(initialForm)
+    setEditingPid(null)
     setModalOpen(false)
+  }
+
+  const openAddModal = () => {
+    setEditingPid(null)
+    setForm(initialForm)
+    setModalOpen(true)
+  }
+
+  const openEditModal = (c) => {
+    const pid = c.pid ?? c.id
+    if (pid == null) return
+    setEditingPid(Number(pid))
+    setForm(rowToForm(c))
+    setModalOpen(true)
   }
 
   return (
     <div className="customers-page">
       <div className="page-header">
-        <h1 className="page-title">Customers</h1>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => setModalOpen(true)}
-        >
+        <h1 className="page-title">{partyKind === 'vendor' ? 'Vendors' : 'Customers'}</h1>
+        <button type="button" className="btn btn-primary" onClick={openAddModal}>
           <Plus size={18} />
-          Add Customer
+          {partyKind === 'vendor' ? 'Add Vendor' : 'Add Customer'}
         </button>
       </div>
 
       <div className="card">
-        <div className="filters-row">
+        <div className="filters-row customers-filters-row">
+          <div className="party-kind-tabs" role="tablist" aria-label="Party type">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={partyKind === 'customer'}
+              className={`party-kind-tab ${partyKind === 'customer' ? 'party-kind-tab--active' : ''}`}
+              onClick={() => setPartyKind('customer')}
+            >
+              Customer
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={partyKind === 'vendor'}
+              className={`party-kind-tab ${partyKind === 'vendor' ? 'party-kind-tab--active' : ''}`}
+              onClick={() => setPartyKind('vendor')}
+            >
+              Vendor
+            </button>
+          </div>
           <div className="search-box">
             <Search size={18} className="search-icon" />
             <input
@@ -102,14 +163,14 @@ export default function Customers() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Customer</th>
+                <th>{partyKind === 'vendor' ? 'Vendor' : 'Customer'}</th>
                 <th>Contact</th>
                 <th>City</th>
                 <th>State</th>
                 <th>GST No</th>
                 <th>Outstanding</th>
                 <th>Total Orders</th>
-                <th></th>
+                <th className="th-actions">Edit</th>
               </tr>
             </thead>
             <tbody>
@@ -139,9 +200,10 @@ export default function Customers() {
                     <button
                       type="button"
                       className="btn-icon"
-                      onClick={() => setViewCustomer(c)}
+                      aria-label="Edit"
+                      onClick={() => openEditModal(c)}
                     >
-                      View
+                      <Edit size={16} />
                     </button>
                   </td>
                 </tr>
@@ -151,98 +213,19 @@ export default function Customers() {
         </div>
       </div>
 
-      {viewCustomer && (
-        <div className="modal-overlay" onClick={() => setViewCustomer(null)} role="presentation">
-          <div className="modal-box modal-box--detail" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Customer Details</h2>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={() => setViewCustomer(null)}
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="customer-detail">
-              <div className="detail-row">
-                <span className="detail-label">Party / Name</span>
-                <span className="detail-value">{viewCustomer.partyname ?? viewCustomer.name ?? '—'}</span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">Mobile No</span>
-                <span className="detail-value">{viewCustomer.mobno ?? viewCustomer.phone ?? '—'}</span>
-              </div>
-              {(viewCustomer.billing_name != null && viewCustomer.billing_name !== '') && (
-                <div className="detail-row">
-                  <span className="detail-label">Billing Name</span>
-                  <span className="detail-value">{viewCustomer.billing_name}</span>
-                </div>
-              )}
-              {(viewCustomer.city != null && viewCustomer.city !== '') && (
-                <div className="detail-row">
-                  <span className="detail-label">City</span>
-                  <span className="detail-value">{viewCustomer.city}</span>
-                </div>
-              )}
-              {(viewCustomer.state != null && viewCustomer.state !== '') && (
-                <div className="detail-row">
-                  <span className="detail-label">State</span>
-                  <span className="detail-value">{viewCustomer.state}</span>
-                </div>
-              )}
-              {(viewCustomer.gst_no != null && viewCustomer.gst_no !== '') && (
-                <div className="detail-row">
-                  <span className="detail-label">GST No</span>
-                  <span className="detail-value">{viewCustomer.gst_no ?? viewCustomer.gstin}</span>
-                </div>
-              )}
-              {viewCustomer.cid != null && viewCustomer.cid !== '' && (
-                <div className="detail-row">
-                  <span className="detail-label">CID</span>
-                  <span className="detail-value">{viewCustomer.cid}</span>
-                </div>
-              )}
-              {viewCustomer.gst_reg != null && (
-                <div className="detail-row">
-                  <span className="detail-label">GST Registered</span>
-                  <span className="detail-value">{viewCustomer.gst_reg === true || viewCustomer.gst_reg === 1 ? 'Yes' : 'No'}</span>
-                </div>
-              )}
-              {viewCustomer.same_state != null && (
-                <div className="detail-row">
-                  <span className="detail-label">Same State</span>
-                  <span className="detail-value">{viewCustomer.same_state === true || viewCustomer.same_state === 1 ? 'Yes' : 'No'}</span>
-                </div>
-              )}
-              <div className="detail-row">
-                <span className="detail-label">Outstanding</span>
-                <span className={`detail-value ${viewCustomer.balanceFormatted && viewCustomer.balanceFormatted !== '₹0' ? 'text-warning' : ''}`}>
-                  {viewCustomer.balanceFormatted ?? (viewCustomer.balance != null ? formatCurrency(viewCustomer.balance) : '—')}
-                </span>
-              </div>
-              {(viewCustomer.totalOrders != null && viewCustomer.totalOrders !== '') && (
-                <div className="detail-row">
-                  <span className="detail-label">Total Orders</span>
-                  <span className="detail-value">{viewCustomer.totalOrders}</span>
-                </div>
-              )}
-              <div className="detail-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setViewCustomer(null)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {modalOpen && (
         <div className="modal-overlay" onClick={handleClose} role="presentation">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Add Customer</h2>
+              <h2 className="modal-title">
+                {editingPid != null
+                  ? partyKind === 'vendor'
+                    ? 'Edit Vendor'
+                    : 'Edit Customer'
+                  : partyKind === 'vendor'
+                    ? 'Add Vendor'
+                    : 'Add Customer'}
+              </h2>
               <button
                 type="button"
                 className="modal-close"
@@ -302,6 +285,18 @@ export default function Customers() {
                   ))}
                 </select>
               </div>
+              <div className="form-group">
+                <label htmlFor="gst_no">GST No</label>
+                <input
+                  id="gst_no"
+                  type="text"
+                  name="gst_no"
+                  value={form.gst_no}
+                  onChange={handleChange}
+                  placeholder="e.g. 29AABCU9603R1ZM"
+                  className="form-input"
+                />
+              </div>
               <div className="form-group form-row-check">
                 <label className="form-check">
                   <input
@@ -328,8 +323,16 @@ export default function Customers() {
                 <button type="button" className="btn btn-secondary" onClick={handleClose}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={isCreating}>
-                  {isCreating ? 'Saving...' : 'Save Customer'}
+                <button type="submit" className="btn btn-primary" disabled={isCreating || isUpdating}>
+                  {isCreating || isUpdating
+                    ? 'Saving...'
+                    : editingPid != null
+                      ? partyKind === 'vendor'
+                        ? 'Update Vendor'
+                        : 'Update Customer'
+                      : partyKind === 'vendor'
+                        ? 'Save Vendor'
+                        : 'Save Customer'}
                 </button>
               </div>
             </form>
