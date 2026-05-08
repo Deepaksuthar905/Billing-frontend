@@ -186,9 +186,10 @@ export const billingApi = createApi({
         const search = typeof arg === 'string' ? arg : arg?.search
         const prtytyp = typeof arg === 'object' && arg?.prtytyp !== undefined ? arg.prtytyp : undefined
         if (search) params.set('search', search)
-        /** Only send `prtytyp` for vendors (`1`). Never send `prtytyp=0` — customers use plain `/customers`. */
-        if (prtytyp !== undefined && prtytyp !== null && prtytyp !== '' && Number(prtytyp) === 1) {
-          params.set('prtytyp', '1')
+        /** Send prtytyp only for vendor party types (1 = purchase vendor, 2 = expense vendor). */
+        if (prtytyp !== undefined && prtytyp !== null && prtytyp !== '') {
+          const partyType = Number(prtytyp)
+          if (partyType === 1 || partyType === 2) params.set('prtytyp', String(partyType))
         }
         return { url: params.toString() ? `/customers?${params}` : '/customers' }
       },
@@ -213,7 +214,7 @@ export const billingApi = createApi({
     updateCustomer: builder.mutation({
       query: ({ pid, id, ...body }) => {
         const partyId = pid ?? id
-        return { url: `/parties/${partyId}`, method: 'PUT', body }
+        return { url: `/parties/${partyId}`, method: 'POST', body }
       },
       invalidatesTags: (_r, _e, arg) => {
         const listId = arg?.pid ?? arg?.id

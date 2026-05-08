@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Search, Phone, X, Edit } from 'lucide-react'
 import { useGetCustomersQuery, useCreateCustomerMutation, useUpdateCustomerMutation } from '../store/api'
 import { formatCurrency } from '../utils/format'
@@ -15,20 +15,23 @@ const initialForm = {
   mobno: '',
   city: '',
   state: '',
+  addr: '',
   gst_no: '',
   gst_reg: 1,
   same_state: 1,
 }
 
 function rowToForm(c) {
+  const state = (c.state ?? '').trim()
   return {
     partyname: (c.partyname ?? c.name ?? '').trim(),
     mobno: (c.mobno ?? c.phone ?? '').trim(),
     city: (c.city ?? '').trim(),
-    state: (c.state ?? '').trim(),
+    state,
+    addr: (c.addr ?? c.address ?? '').trim(),
     gst_no: (c.gst_no ?? c.gstin ?? '').trim(),
     gst_reg: c.gst_reg === true || c.gst_reg === 1 ? 1 : 0,
-    same_state: c.same_state === true || c.same_state === 1 ? 1 : 0,
+    same_state: state === 'Rajasthan' ? 1 : (c.same_state === true || c.same_state === 1 ? 1 : 0),
   }
 }
 
@@ -38,10 +41,26 @@ export default function Customers() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPid, setEditingPid] = useState(null)
   const [form, setForm] = useState(initialForm)
+  const [gstLookupStatus, setGstLookupStatus] = useState('idle') // idle | loading | done | error
+
+  const GST_LOOKUP_URL = import.meta.env.VITE_GST_LOOKUP_URL
+
+  const vendorTypeMap = {
+    purchaseVendor: 1,
+    expenseVendor: 2,
+  }
+  const isVendor = partyKind in vendorTypeMap
+  const currentVendorType = vendorTypeMap[partyKind]
+  const partyLabel =
+    partyKind === 'purchaseVendor'
+      ? 'Purchase Vendor'
+      : partyKind === 'expenseVendor'
+        ? 'Expense Vendor'
+        : 'Customer'
 
   const customerQueryArg =
-    partyKind === 'vendor'
-      ? { search: search || undefined, prtytyp: 1 }
+    isVendor
+      ? { search: search || undefined, prtytyp: currentVendorType }
       : { search: search || undefined }
 
   const { data, isLoading, isError } = useGetCustomersQuery(customerQueryArg, {
@@ -56,8 +75,56 @@ export default function Customers() {
     balanceFormatted: typeof c.balance === 'number' ? formatCurrency(c.balance) : (c.balance ?? '—'),
   }))
 
+  useEffect(() => {
+    if (!modalOpen) return
+    if (!GST_LOOKUP_URL) return
+    const gstin = (form.gst_no || '').trim().toUpperCase()
+    if (gstin.length !== 15) return
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin)) return
+
+    const handle = setTimeout(async () => {
+      try {
+        setGstLookupStatus('loading')
+        const res = await fetch(`${GST_LOOKUP_URL}?gstin=${encodeURIComponent(gstin)}`)
+        if (!res.ok) throw new Error(`GST lookup failed (${res.status})`)
+        const payload = await res.json()
+        const dataObj = payload?.data ?? payload?.result ?? payload
+
+        const nextPartyName =
+          (dataObj?.tradeName ?? dataObj?.trade_name ?? dataObj?.tradeNam ?? dataObj?.tnm ?? '').toString().trim() ||
+          (dataObj?.legalName ?? dataObj?.legal_name ?? dataObj?.lgnm ?? '').toString().trim()
+        const nextAddr =
+          (dataObj?.addr ?? dataObj?.address ?? dataObj?.principalPlaceOfBusiness ?? dataObj?.pradr?.addr ?? '').toString().trim()
+        const nextState = (dataObj?.state ?? dataObj?.stcd ?? '').toString().trim()
+
+        setForm((prev) => ({
+          ...prev,
+          partyname: prev.partyname.trim() ? prev.partyname : (nextPartyName || prev.partyname),
+          addr: prev.addr.trim() ? prev.addr : (nextAddr || prev.addr),
+          state: prev.state.trim() ? prev.state : (nextState || prev.state),
+          gst_reg: 1,
+          same_state: (prev.state.trim() ? prev.state : nextState) === 'Rajasthan' ? 1 : 0,
+        }))
+        setGstLookupStatus('done')
+      } catch (e) {
+        console.warn('GST lookup failed:', e)
+        setGstLookupStatus('error')
+      }
+    }, 500)
+
+    return () => clearTimeout(handle)
+  }, [GST_LOOKUP_URL, form.gst_no, modalOpen])
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    if (name === 'state') {
+      setForm((prev) => ({
+        ...prev,
+        state: value,
+        same_state: value === 'Rajasthan' ? 1 : 0,
+      }))
+      return
+    }
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? (checked ? 1 : 0) : value,
@@ -71,9 +138,10 @@ export default function Customers() {
       mobno: form.mobno.trim(),
       city: form.city.trim(),
       state: form.state.trim(),
+      addr: form.addr.trim(),
       gst_reg: Number(form.gst_reg) || 0,
       same_state: Number(form.same_state) || 0,
-      ...(partyKind === 'vendor' ? { prtytyp: 1 } : {}),
+      ...(isVendor ? { prtytyp: currentVendorType } : {}),
     }
     if (editingPid != null) {
       payload.gst_no = form.gst_no.trim() || null
@@ -118,10 +186,10 @@ export default function Customers() {
   return (
     <div className="customers-page">
       <div className="page-header">
-        <h1 className="page-title">{partyKind === 'vendor' ? 'Vendors' : 'Customers'}</h1>
+        <h1 className="page-title">{isVendor ? partyLabel : 'Customers'}</h1>
         <button type="button" className="btn btn-primary" onClick={openAddModal}>
           <Plus size={18} />
-          {partyKind === 'vendor' ? 'Add Vendor' : 'Add Customer'}
+          {isVendor ? `Add ${partyLabel}` : 'Add Customer'}
         </button>
       </div>
 
@@ -140,11 +208,20 @@ export default function Customers() {
             <button
               type="button"
               role="tab"
-              aria-selected={partyKind === 'vendor'}
-              className={`party-kind-tab ${partyKind === 'vendor' ? 'party-kind-tab--active' : ''}`}
-              onClick={() => setPartyKind('vendor')}
+              aria-selected={partyKind === 'purchaseVendor'}
+              className={`party-kind-tab ${partyKind === 'purchaseVendor' ? 'party-kind-tab--active' : ''}`}
+              onClick={() => setPartyKind('purchaseVendor')}
             >
-              Vendor
+              Purchase Vendor
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={partyKind === 'expenseVendor'}
+              className={`party-kind-tab ${partyKind === 'expenseVendor' ? 'party-kind-tab--active' : ''}`}
+              onClick={() => setPartyKind('expenseVendor')}
+            >
+              Expense Vendor
             </button>
           </div>
           <div className="search-box">
@@ -163,7 +240,7 @@ export default function Customers() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{partyKind === 'vendor' ? 'Vendor' : 'Customer'}</th>
+                <th>{isVendor ? partyLabel : 'Customer'}</th>
                 <th>Contact</th>
                 <th>City</th>
                 <th>State</th>
@@ -219,11 +296,11 @@ export default function Customers() {
             <div className="modal-header">
               <h2 className="modal-title">
                 {editingPid != null
-                  ? partyKind === 'vendor'
-                    ? 'Edit Vendor'
+                  ? isVendor
+                    ? `Edit ${partyLabel}`
                     : 'Edit Customer'
-                  : partyKind === 'vendor'
-                    ? 'Add Vendor'
+                  : isVendor
+                    ? `Add ${partyLabel}`
                     : 'Add Customer'}
               </h2>
               <button
@@ -275,6 +352,18 @@ export default function Customers() {
                 />
               </div>
               <div className="form-group">
+                <label htmlFor="addr">Address</label>
+                <input
+                  id="addr"
+                  type="text"
+                  name="addr"
+                  value={form.addr}
+                  onChange={handleChange}
+                  placeholder="Enter address"
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
                 <label htmlFor="state">State</label>
                 <select id="state" name="state" value={form.state} onChange={handleChange} className="form-input">
                   <option value="">Select</option>
@@ -286,7 +375,10 @@ export default function Customers() {
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="gst_no">GST No</label>
+                <label htmlFor="gst_no">
+                  GST No
+                  {GST_LOOKUP_URL && modalOpen && gstLookupStatus === 'loading' ? <span className="text-muted"> (fetching...)</span> : null}
+                </label>
                 <input
                   id="gst_no"
                   type="text"
@@ -327,11 +419,11 @@ export default function Customers() {
                   {isCreating || isUpdating
                     ? 'Saving...'
                     : editingPid != null
-                      ? partyKind === 'vendor'
-                        ? 'Update Vendor'
+                      ? isVendor
+                        ? `Update ${partyLabel}`
                         : 'Update Customer'
-                      : partyKind === 'vendor'
-                        ? 'Save Vendor'
+                      : isVendor
+                        ? `Save ${partyLabel}`
                         : 'Save Customer'}
                 </button>
               </div>
