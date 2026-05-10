@@ -9,7 +9,48 @@ import {
   useGetPayByListQuery,
 } from '../store/api'
 import { exportCurrentReport } from '../utils/reportExcelExport'
+import {
+  aggregateHsnRows,
+  DEFAULT_SELLER_GSTIN,
+  isB2BInvoice,
+} from '../utils/gstr1JsonExport'
 import './Reports.css'
+
+/** Same outward-supply row shape as GSTR-1 table */
+function mapInvoiceToGstr1Row(inv) {
+  const cgst = Number(inv.cgst) || 0
+  const sgst = Number(inv.sgst) || 0
+  const igst = Number(inv.igst) || 0
+  const totalTax = cgst + sgst + igst
+  const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
+  const taxableValue = invoiceValue - totalTax
+  const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
+  const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
+  const taxRate =
+    gstPercent != null && !Number.isNaN(gstPercent)
+      ? gstPercent
+      : safeTaxableValue > 0
+        ? (totalTax / safeTaxableValue) * 100
+        : 0
+  return {
+    gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
+    partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
+    invNo: inv.inv_no ?? inv.id,
+    date: inv.dt ?? inv.date,
+    value: invoiceValue,
+    taxRate,
+    taxableValue: safeTaxableValue,
+    cgst,
+    sgst,
+    igst,
+    integratedTaxDisplay: igst,
+    centralTaxDisplay: cgst,
+    stateTaxDisplay: sgst,
+    placeOfSupply: inv.state ?? inv.place_of_supply ?? inv.state_name ?? inv.pos,
+  }
+}
+
+const GST_SUBS_WITH_INVOICES = ['gstr1', 'b2b', 'b2c', 'b2b-hsn', 'b2c-hsn']
 
 const formatReportAmount = (num) =>
   `₹ ${Number(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -116,6 +157,10 @@ const reportCategories = [
 
 const gstSubOptions = [
   { id: 'gstr1', title: 'GSTR-1' },
+  { id: 'b2b', title: 'B2B' },
+  { id: 'b2c', title: 'B2C' },
+  { id: 'b2b-hsn', title: 'B2B HSN' },
+  { id: 'b2c-hsn', title: 'B2C HSN' },
   { id: 'gstr3b', title: 'GSTR-3B' },
   { id: 'purchase-reg', title: 'Purchase register' },
   { id: 'gst-rate', title: 'GST Rate Report' },
@@ -259,7 +304,7 @@ export default function Reports() {
       setLedgerFrom(r.from)
       setLedgerTo(r.to)
     } else if (activeReportId === 'gst') {
-      if (activeGstSub === 'gstr1') {
+      if (GST_SUBS_WITH_INVOICES.includes(activeGstSub)) {
         setGstr1From(r.from)
         setGstr1To(r.to)
       } else if (activeGstSub === 'gstr3b') {
@@ -296,9 +341,9 @@ export default function Reports() {
   const ledgerPbidForApi =
     ledgerAppliedPbid != null && ledgerAppliedPbid !== '' ? ledgerAppliedPbid : undefined
 
-  const { data: invoicesData, isLoading: gstr1Loading } = useGetInvoicesQuery(
+  const { data: invoicesData, isLoading: gstInvoicesLoading } = useGetInvoicesQuery(
     { from: gstr1From, to: gstr1To },
-    { skip: !(activeReportId === 'gst' && activeGstSub === 'gstr1') }
+    { skip: !(activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub)) }
   )
 
   const { data: gstr3bInvoicesData, isLoading: gstr3bInvoicesLoading } = useGetInvoicesQuery(
@@ -325,40 +370,32 @@ export default function Reports() {
         return d >= fromDt && d <= toDt
       })
     : invoices
-  const gstr1Rows = filteredInvoices.map((inv) => {
-    const cgst = Number(inv.cgst) || 0
-    const sgst = Number(inv.sgst) || 0
-    const igst = Number(inv.igst) || 0
-    const totalTax = cgst + sgst + igst
-    /** API `amount` = invoice value column; fallback `payment` for older payloads */
-    const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
-    const taxableValue = invoiceValue - totalTax
-    const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
-    const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
-    const taxRate =
-      gstPercent != null && !Number.isNaN(gstPercent)
-        ? gstPercent
-        : safeTaxableValue > 0
-          ? (totalTax / safeTaxableValue) * 100
-          : 0
-    return {
-      gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
-      partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
-      invNo: inv.inv_no ?? inv.id,
-      date: inv.dt ?? inv.date,
-      value: invoiceValue,
-      taxRate,
-      taxableValue: safeTaxableValue,
-      cgst,
-      sgst,
-      igst,
-      /** Table columns: Integrated → SGST, Central → IGST, State → CGST (per report layout) */
-      integratedTaxDisplay: igst,
-      centralTaxDisplay: cgst,
-      stateTaxDisplay: sgst,
-      placeOfSupply: inv.state ?? inv.place_of_supply ?? inv.state_name ?? inv.pos,
-    }
-  })
+  const gstr1Rows = filteredInvoices.map(mapInvoiceToGstr1Row)
+
+  const b2bInvoices = filteredInvoices.filter((inv) => isB2BInvoice(inv, DEFAULT_SELLER_GSTIN))
+  const b2cInvoices = filteredInvoices.filter((inv) => !isB2BInvoice(inv, DEFAULT_SELLER_GSTIN))
+  const b2bRows = b2bInvoices.map(mapInvoiceToGstr1Row)
+  const b2cRows = b2cInvoices.map(mapInvoiceToGstr1Row)
+  const b2bHsnRows = aggregateHsnRows(b2bInvoices)
+  const b2cHsnRows = aggregateHsnRows(b2cInvoices)
+  const b2bHsnTotals = b2bHsnRows.reduce(
+    (s, r) => ({
+      txval: s.txval + (Number(r.txval) || 0),
+      iamt: s.iamt + (Number(r.iamt) || 0),
+      camt: s.camt + (Number(r.camt) || 0),
+      samt: s.samt + (Number(r.samt) || 0),
+    }),
+    { txval: 0, iamt: 0, camt: 0, samt: 0 }
+  )
+  const b2cHsnTotals = b2cHsnRows.reduce(
+    (s, r) => ({
+      txval: s.txval + (Number(r.txval) || 0),
+      iamt: s.iamt + (Number(r.iamt) || 0),
+      camt: s.camt + (Number(r.camt) || 0),
+      samt: s.samt + (Number(r.samt) || 0),
+    }),
+    { txval: 0, iamt: 0, camt: 0, samt: 0 }
+  )
   const gstr1HsnSummary = gstr1Rows.length
     ? {
         totalTaxable: gstr1Rows.reduce((s, r) => s + (r.taxableValue || 0), 0),
@@ -464,6 +501,12 @@ export default function Reports() {
       gstr1To,
       gstr1Rows,
       gstr1HsnSummary,
+      b2bFrom: gstr1From,
+      b2bTo: gstr1To,
+      b2bRows,
+      b2cRows,
+      b2bHsnRows,
+      b2cHsnRows,
       gstr3bFrom,
       gstr3bTo,
       outward3b,
@@ -726,7 +769,7 @@ export default function Reports() {
                 </div>
               </div>
               <h2 className="gst-rate-title">GSTR-1 – Outward Supplies</h2>
-              {gstr1Loading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -754,7 +797,7 @@ export default function Reports() {
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
                         <td className="text-right">{formatReportAmount(row.value)}</td>
-                        <td className="text-right">18%</td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
                         <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
                         <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
@@ -792,6 +835,320 @@ export default function Reports() {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'b2b' && (
+            <div className="gstr1-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">B2B – Registered outward supplies</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                Invoices with a valid buyer GSTIN (excludes your company GSTIN). Count: {b2bRows.length}
+              </p>
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>GSTIN</th>
+                      <th>Party Name</th>
+                      <th>Invoice no.</th>
+                      <th>Date</th>
+                      <th className="text-right">Value</th>
+                      <th className="text-right">Tax Rate</th>
+                      <th className="text-right">Taxable Value</th>
+                      <th className="text-right">Integrated Tax</th>
+                      <th className="text-right">Central Tax</th>
+                      <th className="text-right">State Tax</th>
+                      <th>Place of Supply</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b2bRows.map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getDisplayValue(row.partyName)}</td>
+                        <td>{getDisplayValue(row.invNo)}</td>
+                        <td>{getDisplayValue(row.date)}</td>
+                        <td className="text-right">{formatReportAmount(row.value)}</td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
+                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
+                        <td>{getDisplayValue(row.placeOfSupply)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'b2c' && (
+            <div className="gstr1-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">B2C – Unregistered / retail outward supplies</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                Invoices without a valid buyer GSTIN on record. Count: {b2cRows.length}
+              </p>
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>GSTIN</th>
+                      <th>Party Name</th>
+                      <th>Invoice no.</th>
+                      <th>Date</th>
+                      <th className="text-right">Value</th>
+                      <th className="text-right">Tax Rate</th>
+                      <th className="text-right">Taxable Value</th>
+                      <th className="text-right">Integrated Tax</th>
+                      <th className="text-right">Central Tax</th>
+                      <th className="text-right">State Tax</th>
+                      <th>Place of Supply</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b2cRows.map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getDisplayValue(row.partyName)}</td>
+                        <td>{getDisplayValue(row.invNo)}</td>
+                        <td>{getDisplayValue(row.date)}</td>
+                        <td className="text-right">{formatReportAmount(row.value)}</td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
+                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
+                        <td>{getDisplayValue(row.placeOfSupply)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'b2b-hsn' && (
+            <div className="gstr1-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">B2B – HSN summary</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                HSN-wise totals for B2B invoices only ({b2bInvoices.length} invoices).
+              </p>
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>HSN</th>
+                      <th>UQC</th>
+                      <th className="text-right">Qty</th>
+                      <th className="text-right">Rate %</th>
+                      <th className="text-right">Taxable value</th>
+                      <th className="text-right">IGST</th>
+                      <th className="text-right">CGST</th>
+                      <th className="text-right">SGST</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b2bHsnRows.map((row) => (
+                      <tr key={`${row.hsn_sc}-${row.rt}-${row.uqc}-${row.num}`}>
+                        <td>{row.num}</td>
+                        <td>{row.hsn_sc}</td>
+                        <td>{row.uqc}</td>
+                        <td className="text-right">{row.qty}</td>
+                        <td className="text-right">{`${Number(row.rt || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">{formatReportAmount(row.txval)}</td>
+                        <td className="text-right">{formatReportAmount(row.iamt)}</td>
+                        <td className="text-right">{formatReportAmount(row.camt)}</td>
+                        <td className="text-right">{formatReportAmount(row.samt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {b2bHsnRows.length > 0 && (
+                    <tfoot>
+                      <tr className="table-total-row">
+                        <td colSpan={5} className="font-medium">Total</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2bHsnTotals.txval)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2bHsnTotals.iamt)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2bHsnTotals.camt)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2bHsnTotals.samt)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'b2c-hsn' && (
+            <div className="gstr1-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">B2C – HSN summary</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                HSN-wise totals for B2C invoices only ({b2cInvoices.length} invoices).
+              </p>
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>HSN</th>
+                      <th>UQC</th>
+                      <th className="text-right">Qty</th>
+                      <th className="text-right">Rate %</th>
+                      <th className="text-right">Taxable value</th>
+                      <th className="text-right">IGST</th>
+                      <th className="text-right">CGST</th>
+                      <th className="text-right">SGST</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b2cHsnRows.map((row) => (
+                      <tr key={`${row.hsn_sc}-${row.rt}-${row.uqc}-${row.num}`}>
+                        <td>{row.num}</td>
+                        <td>{row.hsn_sc}</td>
+                        <td>{row.uqc}</td>
+                        <td className="text-right">{row.qty}</td>
+                        <td className="text-right">{`${Number(row.rt || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">{formatReportAmount(row.txval)}</td>
+                        <td className="text-right">{formatReportAmount(row.iamt)}</td>
+                        <td className="text-right">{formatReportAmount(row.camt)}</td>
+                        <td className="text-right">{formatReportAmount(row.samt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {b2cHsnRows.length > 0 && (
+                    <tfoot>
+                      <tr className="table-total-row">
+                        <td colSpan={5} className="font-medium">Total</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2cHsnTotals.txval)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2cHsnTotals.iamt)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2cHsnTotals.camt)}</td>
+                        <td className="text-right font-medium">{formatReportAmount(b2cHsnTotals.samt)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </div>
           )}
 

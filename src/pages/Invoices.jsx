@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar } from 'lucide-react'
+import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar, FileJson } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
+import { getAuthToken } from '../lib/authToken'
 import { formatCurrency, formatDate } from '../utils/format'
+import { buildGstr1JsonPayload, downloadJson } from '../utils/gstr1JsonExport'
 import InvoicePreviewModal from './InvoicePreviewModal'
 import './Invoices.css'
 
@@ -44,6 +46,7 @@ export default function Invoices() {
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [isExportingJson, setIsExportingJson] = useState(false)
   const selectAllRef = useRef(null)
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
@@ -127,6 +130,81 @@ export default function Invoices() {
     { sumTotal: 0, sumPending: 0 }
   )
 
+  const handleExportGstr1Json = async () => {
+    if (!invoices.length) {
+      alert('No invoices in the current filter to export.')
+      return
+    }
+    setIsExportingJson(true)
+    try {
+      const token = getAuthToken()
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+      const rows = await Promise.all(
+        invoices.map(async (inv) => {
+          const res = await fetch(`${API_BASE_URL}/invoices/${inv.id}`, { headers })
+          if (!res.ok) throw new Error(`Could not load invoice ${inv.invNoStr || inv.id} (${res.status})`)
+          const raw = await res.json()
+          return raw?.data ?? raw
+        })
+      )
+
+      /** Many APIs store buyer GSTIN only on customer master — merge for B2B export. */
+      let enrichedRows = rows
+      try {
+        const cr = await fetch(`${API_BASE_URL}/customers`, { headers })
+        if (cr.ok) {
+          const rawCustomers = await cr.json()
+          const list =
+            rawCustomers?.data ??
+            rawCustomers?.results ??
+            (Array.isArray(rawCustomers) ? rawCustomers : [])
+          const byPid = new Map()
+          for (const c of list) {
+            const id = c.pid ?? c.id
+            if (id != null) byPid.set(String(id), c)
+          }
+          enrichedRows = rows.map((inv) => {
+            const pid = inv.pid ?? inv.customer_id ?? inv.party_id
+            if (pid == null) return inv
+            const c = byPid.get(String(pid))
+            if (!c) return inv
+            const partyGst = String(c.gst_no ?? c.gstin ?? '')
+              .trim()
+            if (!partyGst) return inv
+            if (String(inv.gst_no ?? inv.customer_gstin ?? inv.buyer_gstin ?? '').replace(/\s/g, '').length >= 15) {
+              return inv
+            }
+            return { ...inv, gst_no: inv.gst_no || partyGst }
+          })
+        }
+      } catch (e) {
+        console.warn('Customer GST merge for export skipped:', e)
+      }
+
+      const anchor = filterFrom || filterTo || (enrichedRows[0] && (enrichedRows[0].dt ?? enrichedRows[0].date))
+      const { payload, skippedNoGstin } = buildGstr1JsonPayload(enrichedRows, {
+        anchorDateForFp: anchor,
+      })
+      if (!payload.b2b.length && skippedNoGstin.length) {
+        alert(
+          'No B2B rows: customer GSTIN missing or invalid on all invoices in this range. HSN / doc_issue still reflect all invoices.'
+        )
+      } else if (skippedNoGstin.length) {
+        alert(
+          `${skippedNoGstin.length} invoice(s) skipped in B2B (no valid buyer GSTIN): ${skippedNoGstin.slice(0, 8).join(', ')}${skippedNoGstin.length > 8 ? '…' : ''}`
+        )
+      }
+      const fn = `GSTR1_${payload.fp}_${payload.gstin}.json`.replace(/[/\\:*?"<>|]/g, '-')
+      downloadJson(fn, payload)
+    } catch (err) {
+      console.error('Export JSON failed:', err)
+      alert(err?.message || 'Export failed. Check console.')
+    } finally {
+      setIsExportingJson(false)
+    }
+  }
+
   const handleSync = async () => {
     const from = dateFrom || new Date().toISOString().slice(0, 10)
     const to = dateTo || new Date().toISOString().slice(0, 10)
@@ -181,6 +259,16 @@ export default function Invoices() {
               />
             </label>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportGstr1Json}
+            disabled={isExportingJson || isLoading}
+            title="Download GSTR-1 style JSON for the filtered date range (same rows as the table)"
+          >
+            <FileJson size={18} />
+            {isExportingJson ? 'Exporting…' : 'Export JSON'}
+          </button>
           <button
             type="button"
             className="btn btn-secondary"

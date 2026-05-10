@@ -35,6 +35,12 @@ export function exportCurrentReport(ctx) {
     gstr1To,
     gstr1Rows,
     gstr1HsnSummary,
+    b2bFrom,
+    b2bTo,
+    b2bRows,
+    b2cRows,
+    b2bHsnRows,
+    b2cHsnRows,
     gstr3bFrom,
     gstr3bTo,
     outward3b,
@@ -240,6 +246,150 @@ export function exportCurrentReport(ctx) {
       })
     }
     baseName = `GSTR-1_${gstr1From}_${gstr1To}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'b2b') {
+    sheets.push({
+      name: 'B2B Outward',
+      rows: [
+        ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
+        [],
+        [
+          'Sno.',
+          'GSTIN',
+          'Party Name',
+          'Invoice no.',
+          'Date',
+          'Value',
+          'Tax Rate %',
+          'Taxable Value',
+          'Integrated Tax',
+          'Central Tax',
+          'State Tax',
+          'Place of Supply',
+        ],
+        ...(b2bRows || []).map((row, i) => [
+          i + 1,
+          row.gstin ?? '',
+          row.partyName ?? '',
+          row.invNo ?? '',
+          row.date ?? '',
+          row.value ?? 0,
+          row.taxRate ?? 0,
+          row.taxableValue ?? 0,
+          row.integratedTaxDisplay ?? 0,
+          row.centralTaxDisplay ?? 0,
+          row.stateTaxDisplay ?? 0,
+          row.placeOfSupply ?? '',
+        ]),
+      ],
+    })
+    baseName = `B2B_${b2bFrom ?? ''}_${b2bTo ?? ''}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'b2c') {
+    sheets.push({
+      name: 'B2C Outward',
+      rows: [
+        ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
+        [],
+        [
+          'Sno.',
+          'GSTIN',
+          'Party Name',
+          'Invoice no.',
+          'Date',
+          'Value',
+          'Tax Rate %',
+          'Taxable Value',
+          'Integrated Tax',
+          'Central Tax',
+          'State Tax',
+          'Place of Supply',
+        ],
+        ...(b2cRows || []).map((row, i) => [
+          i + 1,
+          row.gstin ?? '',
+          row.partyName ?? '',
+          row.invNo ?? '',
+          row.date ?? '',
+          row.value ?? 0,
+          row.taxRate ?? 0,
+          row.taxableValue ?? 0,
+          row.integratedTaxDisplay ?? 0,
+          row.centralTaxDisplay ?? 0,
+          row.stateTaxDisplay ?? 0,
+          row.placeOfSupply ?? '',
+        ]),
+      ],
+    })
+    baseName = `B2C_${b2bFrom ?? ''}_${b2bTo ?? ''}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'b2b-hsn') {
+    const hsnFoot =
+      (b2bHsnRows || []).reduce(
+        (s, r) => ({
+          txval: s.txval + (Number(r.txval) || 0),
+          iamt: s.iamt + (Number(r.iamt) || 0),
+          camt: s.camt + (Number(r.camt) || 0),
+          samt: s.samt + (Number(r.samt) || 0),
+        }),
+        { txval: 0, iamt: 0, camt: 0, samt: 0 }
+      )
+    sheets.push({
+      name: 'B2B HSN',
+      rows: [
+        ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
+        ['Note', 'HSN totals for B2B invoices only'],
+        [],
+        ['Sno.', 'HSN', 'UQC', 'Qty', 'Rate %', 'Taxable value', 'IGST', 'CGST', 'SGST'],
+        ...(b2bHsnRows || []).map((row) => [
+          row.num ?? '',
+          row.hsn_sc ?? '',
+          row.uqc ?? '',
+          row.qty ?? 0,
+          row.rt ?? 0,
+          row.txval ?? 0,
+          row.iamt ?? 0,
+          row.camt ?? 0,
+          row.samt ?? 0,
+        ]),
+        ...(b2bHsnRows?.length
+          ? [['Total', '', '', '', '', hsnFoot.txval, hsnFoot.iamt, hsnFoot.camt, hsnFoot.samt]]
+          : []),
+      ],
+    })
+    baseName = `B2B_HSN_${b2bFrom ?? ''}_${b2bTo ?? ''}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'b2c-hsn') {
+    const hsnFootB2c =
+      (b2cHsnRows || []).reduce(
+        (s, r) => ({
+          txval: s.txval + (Number(r.txval) || 0),
+          iamt: s.iamt + (Number(r.iamt) || 0),
+          camt: s.camt + (Number(r.camt) || 0),
+          samt: s.samt + (Number(r.samt) || 0),
+        }),
+        { txval: 0, iamt: 0, camt: 0, samt: 0 }
+      )
+    sheets.push({
+      name: 'B2C HSN',
+      rows: [
+        ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
+        ['Note', 'HSN totals for B2C invoices only'],
+        [],
+        ['Sno.', 'HSN', 'UQC', 'Qty', 'Rate %', 'Taxable value', 'IGST', 'CGST', 'SGST'],
+        ...(b2cHsnRows || []).map((row) => [
+          row.num ?? '',
+          row.hsn_sc ?? '',
+          row.uqc ?? '',
+          row.qty ?? 0,
+          row.rt ?? 0,
+          row.txval ?? 0,
+          row.iamt ?? 0,
+          row.camt ?? 0,
+          row.samt ?? 0,
+        ]),
+        ...(b2cHsnRows?.length
+          ? [['Total', '', '', '', '', hsnFootB2c.txval, hsnFootB2c.iamt, hsnFootB2c.camt, hsnFootB2c.samt]]
+          : []),
+      ],
+    })
+    baseName = `B2C_HSN_${b2bFrom ?? ''}_${b2bTo ?? ''}`
   } else if (activeReportId === 'gst' && activeGstSub === 'gstr3b') {
     sheets.push({
       name: 'GSTR-3B Summary',
