@@ -41,6 +41,9 @@ export function exportCurrentReport(ctx) {
     b2cRows,
     b2bHsnRows,
     b2cHsnRows,
+    docSummaryFrom,
+    docSummaryTo,
+    documentIssuedSummary,
     gstr3bFrom,
     gstr3bTo,
     outward3b,
@@ -335,7 +338,7 @@ export function exportCurrentReport(ctx) {
       name: 'B2B HSN',
       rows: [
         ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
-        ['Note', 'HSN totals for B2B invoices only'],
+        ['Note', 'HSN totals: party has gst_no + gst_reg=1'],
         [],
         ['Sno.', 'HSN', 'UQC', 'Qty', 'Rate %', 'Taxable value', 'IGST', 'CGST', 'SGST'],
         ...(b2bHsnRows || []).map((row) => [
@@ -370,7 +373,7 @@ export function exportCurrentReport(ctx) {
       name: 'B2C HSN',
       rows: [
         ['Date range', `${b2bFrom ?? ''} to ${b2bTo ?? ''}`],
-        ['Note', 'HSN totals for B2C invoices only'],
+        ['Note', 'HSN totals: all invoices not classified as party-B2B'],
         [],
         ['Sno.', 'HSN', 'UQC', 'Qty', 'Rate %', 'Taxable value', 'IGST', 'CGST', 'SGST'],
         ...(b2cHsnRows || []).map((row) => [
@@ -390,6 +393,27 @@ export function exportCurrentReport(ctx) {
       ],
     })
     baseName = `B2C_HSN_${b2bFrom ?? ''}_${b2bTo ?? ''}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'doc-summary') {
+    const dis = documentIssuedSummary ?? { rows: [], grandTotal: 0, grandCancelled: 0 }
+    sheets.push({
+      name: 'Documents issued',
+      rows: [
+        ['Summary of documents issued during the tax period'],
+        ['Period', `${docSummaryFrom ?? ''} to ${docSummaryTo ?? ''}`],
+        [],
+        ['Period total', '', '', dis.grandTotal ?? 0, dis.grandCancelled ?? 0],
+        [],
+        ['Nature of document', 'Sr. No. From', 'Sr. No. To', 'Total Number', 'Cancelled'],
+        ...(dis.rows || []).map((r) => [
+          r.nature ?? '',
+          r.srFrom ?? '',
+          r.srTo ?? '',
+          r.totalNumber ?? 0,
+          r.cancelled ?? 0,
+        ]),
+      ],
+    })
+    baseName = `Documents_Issued_${docSummaryFrom ?? ''}_${docSummaryTo ?? ''}`
   } else if (activeReportId === 'gst' && activeGstSub === 'gstr3b') {
     sheets.push({
       name: 'GSTR-3B Summary',

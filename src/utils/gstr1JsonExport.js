@@ -6,7 +6,7 @@
 export const DEFAULT_SELLER_GSTIN =
   import.meta.env.VITE_COMPANY_GSTIN || '08DTGPS6229M2ZW'
 
-function round2(x) {
+export function round2(x) {
   return Math.round((Number(x) || 0) * 100) / 100
 }
 
@@ -53,7 +53,7 @@ function normalizeGstinStr(v) {
   return g.length === 15 ? g : ''
 }
 
-function customerGstin(inv, sellerGstin = '') {
+export function customerGstin(inv, sellerGstin = '') {
   const seller = normalizeGstinStr(sellerGstin)
   const cust =
     inv.customer && typeof inv.customer === 'object'
@@ -94,7 +94,7 @@ export function isB2BInvoice(inv, sellerGstin = DEFAULT_SELLER_GSTIN) {
 }
 
 /** POS: 2-digit state code — prefer buyer GSTIN; else numeric state field; else seller state. */
-function getPos(inv, sellerGstin) {
+export function getGstr1PlaceOfSupply(inv, sellerGstin = DEFAULT_SELLER_GSTIN) {
   const g = customerGstin(inv, sellerGstin)
   if (g && GSTIN_RE.test(g)) return g.slice(0, 2)
   const raw = inv.place_of_supply ?? inv.state ?? inv.state_name ?? inv.pos ?? ''
@@ -149,7 +149,7 @@ function lineTaxSplit(lineTax, headerIgst) {
  * @param {object} inv – full invoice from API
  * @param {string} sellerGstin
  */
-function buildInvoiceEntry(inv, sellerGstin) {
+export function buildGstr1InvoiceEntry(inv, sellerGstin) {
   const inum = invNo(inv)
   const idt = formatIdt(inv.dt ?? inv.date)
   const cgst = Number(inv.cgst) || 0
@@ -160,7 +160,7 @@ function buildInvoiceEntry(inv, sellerGstin) {
   const headerTaxable = invoiceValue - totalTax
   const safeHeaderTaxable = headerTaxable > 0 ? headerTaxable : invoiceValue
 
-  const pos = getPos(inv, sellerGstin)
+  const pos = getGstr1PlaceOfSupply(inv, sellerGstin)
   const items = normalizeItems(inv)
   const rtDefault = Number(inv.gst) || 18
 
@@ -327,7 +327,7 @@ export function buildGstr1JsonPayload(fullInvoices, opts = {}) {
     .sort()
     .map((ctin) => ({
       ctin,
-      inv: byCtin[ctin].map((inv) => buildInvoiceEntry(inv, gstin)),
+      inv: byCtin[ctin].map((inv) => buildGstr1InvoiceEntry(inv, gstin)),
     }))
 
   const hsn_b2b = aggregateHsnRows(fullInvoices)

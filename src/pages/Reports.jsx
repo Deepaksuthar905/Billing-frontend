@@ -1,19 +1,29 @@
-import { useState, useEffect } from 'react'
-import { BarChart3, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { BarChart3, FileText, Calendar, Download, Share2, Printer, FileJson } from 'lucide-react'
 import {
+  API_BASE_URL,
   useGetGstRateReportQuery,
   useGetInvoicesQuery,
   useGetPurchaseOrdersQuery,
   useGetLedgerQuery,
   useGetExpenseReportQuery,
   useGetPayByListQuery,
+  useGetCustomersQuery,
 } from '../store/api'
+import { getAuthToken } from '../lib/authToken'
 import { exportCurrentReport } from '../utils/reportExcelExport'
+import { aggregateHsnRows, downloadJson } from '../utils/gstr1JsonExport'
+import { buildDocumentIssuedSummary } from '../utils/documentIssuedSummary'
 import {
-  aggregateHsnRows,
-  DEFAULT_SELLER_GSTIN,
-  isB2BInvoice,
-} from '../utils/gstr1JsonExport'
+  buildPartyMapByPid,
+  invoiceIsB2BByParty,
+  mergePartyGstOntoInvoices,
+} from '../utils/partyB2b'
+import {
+  buildCombinedGstr1PortalPayload,
+  buildPortalSlicePayload,
+  getB2bPortalSkippedInvoices,
+} from '../utils/gstr1PortalSliceExport'
 import './Reports.css'
 
 /** Same outward-supply row shape as GSTR-1 table */
@@ -50,7 +60,12 @@ function mapInvoiceToGstr1Row(inv) {
   }
 }
 
-const GST_SUBS_WITH_INVOICES = ['gstr1', 'b2b', 'b2c', 'b2b-hsn', 'b2c-hsn']
+const GST_SUBS_WITH_INVOICES = ['gstr1', 'b2b', 'b2c', 'b2b-hsn', 'b2c-hsn', 'doc-summary']
+/** B2B/B2C split needs `/customers` (party gst_no + gst_reg). */
+const GST_SUBS_NEED_PARTY_FOR_B2 = ['b2b', 'b2c', 'b2b-hsn', 'b2c-hsn']
+
+/** GST portal–style JSON download (NIC Returns JSON shape). */
+const GST_SUBS_PORTAL_JSON = ['b2b', 'b2c', 'b2b-hsn', 'b2c-hsn', 'doc-summary']
 
 const formatReportAmount = (num) =>
   `₹ ${Number(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -161,6 +176,7 @@ const gstSubOptions = [
   { id: 'b2c', title: 'B2C' },
   { id: 'b2b-hsn', title: 'B2B HSN' },
   { id: 'b2c-hsn', title: 'B2C HSN' },
+  { id: 'doc-summary', title: 'Documents issued' },
   { id: 'gstr3b', title: 'GSTR-3B' },
   { id: 'purchase-reg', title: 'Purchase register' },
   { id: 'gst-rate', title: 'GST Rate Report' },
@@ -288,6 +304,8 @@ export default function Reports() {
   const [ledgerPayById, setLedgerPayById] = useState('')
   /** Set on Apply only — changing dropdown does not refetch */
   const [ledgerAppliedPbid, setLedgerAppliedPbid] = useState(undefined)
+  const [isExportingPortalJson, setIsExportingPortalJson] = useState(false)
+  const [isExportingFullGstr1Json, setIsExportingFullGstr1Json] = useState(false)
 
   const handleHeaderDateRangeChange = (preset) => {
     setDateRange(preset)
@@ -346,6 +364,19 @@ export default function Reports() {
     { skip: !(activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub)) }
   )
 
+  const { data: customersData, isLoading: customersForB2Loading } = useGetCustomersQuery(undefined, {
+    skip: !(activeReportId === 'gst' && GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub)),
+  })
+
+  const partyByPid = useMemo(
+    () => buildPartyMapByPid(customersData?.data ?? []),
+    [customersData?.data]
+  )
+
+  const gstB2SplitLoading =
+    gstInvoicesLoading ||
+    (GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) && customersForB2Loading)
+
   const { data: gstr3bInvoicesData, isLoading: gstr3bInvoicesLoading } = useGetInvoicesQuery(
     { from: gstr3bFrom, to: gstr3bTo },
     { skip: !(activeReportId === 'gst' && activeGstSub === 'gstr3b') }
@@ -372,8 +403,8 @@ export default function Reports() {
     : invoices
   const gstr1Rows = filteredInvoices.map(mapInvoiceToGstr1Row)
 
-  const b2bInvoices = filteredInvoices.filter((inv) => isB2BInvoice(inv, DEFAULT_SELLER_GSTIN))
-  const b2cInvoices = filteredInvoices.filter((inv) => !isB2BInvoice(inv, DEFAULT_SELLER_GSTIN))
+  const b2bInvoices = filteredInvoices.filter((inv) => invoiceIsB2BByParty(inv, partyByPid))
+  const b2cInvoices = filteredInvoices.filter((inv) => !invoiceIsB2BByParty(inv, partyByPid))
   const b2bRows = b2bInvoices.map(mapInvoiceToGstr1Row)
   const b2cRows = b2cInvoices.map(mapInvoiceToGstr1Row)
   const b2bHsnRows = aggregateHsnRows(b2bInvoices)
@@ -396,6 +427,7 @@ export default function Reports() {
     }),
     { txval: 0, iamt: 0, camt: 0, samt: 0 }
   )
+  const documentIssuedSummary = buildDocumentIssuedSummary(filteredInvoices)
   const gstr1HsnSummary = gstr1Rows.length
     ? {
         totalTaxable: gstr1Rows.reduce((s, r) => s + (r.taxableValue || 0), 0),
@@ -493,6 +525,155 @@ export default function Reports() {
       ledgerTo !== ledgerAppliedTo ||
       String(ledgerPayById || '') !== String(ledgerAppliedPbid ?? ''))
 
+  const handleExportGstPortalJson = async () => {
+    if (!GST_SUBS_PORTAL_JSON.includes(activeGstSub)) return
+
+    let sourceRows = filteredInvoices
+    if (activeGstSub === 'b2b' || activeGstSub === 'b2b-hsn') sourceRows = b2bInvoices
+    else if (activeGstSub === 'b2c' || activeGstSub === 'b2c-hsn') sourceRows = b2cInvoices
+
+    if (activeGstSub !== 'doc-summary' && !sourceRows.length) {
+      alert('No invoices to export for this tab.')
+      return
+    }
+    if (activeGstSub === 'doc-summary' && !filteredInvoices.length) {
+      alert('No invoices to export for this tab.')
+      return
+    }
+
+    setIsExportingPortalJson(true)
+    try {
+      const token = getAuthToken()
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+
+      let customersList = customersData?.data ?? []
+      if (!customersList.length) {
+        const cr = await fetch(`${API_BASE_URL}/customers`, { headers })
+        if (cr.ok) {
+          const raw = await cr.json()
+          customersList =
+            raw?.data ?? raw?.results ?? (Array.isArray(raw) ? raw : [])
+        }
+      }
+      const partyByPid = buildPartyMapByPid(customersList)
+
+      const idsForFetch =
+        activeGstSub === 'doc-summary'
+          ? filteredInvoices.map((i) => i.id).filter((id) => id != null)
+          : sourceRows.map((i) => i.id).filter((id) => id != null)
+
+      const rows = await Promise.all(
+        idsForFetch.map(async (id) => {
+          const res = await fetch(`${API_BASE_URL}/invoices/${id}`, { headers })
+          if (!res.ok) throw new Error(`Could not load invoice ${id} (${res.status})`)
+          const raw = await res.json()
+          return raw?.data ?? raw
+        })
+      )
+      const merged = mergePartyGstOntoInvoices(rows, customersList)
+
+      const anchor = gstr1From || gstr1To || (merged[0] && (merged[0].dt ?? merged[0].date))
+      const payload = buildPortalSlicePayload(activeGstSub, {
+        fullInvoices: merged,
+        partyByPid,
+        anchorDateStr: anchor,
+      })
+
+      const fp = payload.fp
+      const g = payload.gstin
+      const labels = {
+        b2b: 'B2B',
+        b2c: 'B2CS',
+        'b2b-hsn': 'B2B_HSN',
+        'b2c-hsn': 'B2C_HSN',
+        'doc-summary': 'DOC_ISSUE',
+      }
+      const fn = `GSTR1_${labels[activeGstSub]}_${fp}_${g}.json`.replace(/[/\\:*?"<>|]/g, '-')
+
+      if (activeGstSub === 'b2b') {
+        const b2bFull = merged.filter((inv) => invoiceIsB2BByParty(inv, partyByPid))
+        const skipped = getB2bPortalSkippedInvoices(b2bFull, partyByPid, g)
+        if (skipped.length) {
+          alert(
+            `${skipped.length} invoice(s) skipped — buyer GSTIN must be valid 15-character format on party or invoice: ${skipped.slice(0, 10).join(', ')}${skipped.length > 10 ? '…' : ''}`
+          )
+        }
+        if (!payload.b2b?.length) {
+          alert('No B2B rows with valid GSTIN in JSON (portal requires ctin). Empty b2b array in file.')
+        }
+      }
+
+      downloadJson(fn, payload)
+    } catch (err) {
+      console.error('GST portal JSON export failed:', err)
+      alert(err?.message || 'Export failed. Check console.')
+    } finally {
+      setIsExportingPortalJson(false)
+    }
+  }
+
+  const handleExportCombinedGstr1Json = async () => {
+    if (activeReportId !== 'gst' || !GST_SUBS_WITH_INVOICES.includes(activeGstSub)) return
+    if (!filteredInvoices.length) {
+      alert('No invoices in the selected date range.')
+      return
+    }
+
+    setIsExportingFullGstr1Json(true)
+    try {
+      const token = getAuthToken()
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+
+      let customersList = customersData?.data ?? []
+      if (!customersList.length) {
+        const cr = await fetch(`${API_BASE_URL}/customers`, { headers })
+        if (cr.ok) {
+          const raw = await cr.json()
+          customersList =
+            raw?.data ?? raw?.results ?? (Array.isArray(raw) ? raw : [])
+        }
+      }
+      const partyByPid = buildPartyMapByPid(customersList)
+
+      const idsForFetch = filteredInvoices.map((i) => i.id).filter((id) => id != null)
+
+      const rows = await Promise.all(
+        idsForFetch.map(async (id) => {
+          const res = await fetch(`${API_BASE_URL}/invoices/${id}`, { headers })
+          if (!res.ok) throw new Error(`Could not load invoice ${id} (${res.status})`)
+          const raw = await res.json()
+          return raw?.data ?? raw
+        })
+      )
+      const merged = mergePartyGstOntoInvoices(rows, customersList)
+
+      const anchor = gstr1From || gstr1To || (merged[0] && (merged[0].dt ?? merged[0].date))
+      const payload = buildCombinedGstr1PortalPayload({
+        fullInvoices: merged,
+        partyByPid,
+        anchorDateStr: anchor,
+      })
+
+      const b2bFull = merged.filter((inv) => invoiceIsB2BByParty(inv, partyByPid))
+      const skipped = getB2bPortalSkippedInvoices(b2bFull, partyByPid, payload.gstin)
+      if (skipped.length) {
+        alert(
+          `${skipped.length} B2B invoice(s) skipped in b2b block — portal needs valid 15-char GSTIN on party/invoice: ${skipped.slice(0, 10).join(', ')}${skipped.length > 10 ? '…' : ''}`
+        )
+      }
+
+      const fn = `GSTR1_FULL_${payload.fp}_${payload.gstin}.json`.replace(/[/\\:*?"<>|]/g, '-')
+      downloadJson(fn, payload)
+    } catch (err) {
+      console.error('Full GSTR-1 JSON export failed:', err)
+      alert(err?.message || 'Export failed. Check console.')
+    } finally {
+      setIsExportingFullGstr1Json(false)
+    }
+  }
+
   const handleExportExcel = () => {
     exportCurrentReport({
       activeReportId,
@@ -507,6 +688,9 @@ export default function Reports() {
       b2cRows,
       b2bHsnRows,
       b2cHsnRows,
+      docSummaryFrom: gstr1From,
+      docSummaryTo: gstr1To,
+      documentIssuedSummary,
       gstr3bFrom,
       gstr3bTo,
       outward3b,
@@ -560,6 +744,34 @@ export default function Reports() {
             <Download size={18} />
             Export
           </button>
+          {activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub) && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleExportCombinedGstr1Json}
+              disabled={
+                isExportingFullGstr1Json || isExportingPortalJson || gstInvoicesLoading
+              }
+              title="Single file: b2b + b2cs + hsn (B2B & B2C) + doc_issue — same combined shape as GSTR-1 offline utility"
+            >
+              <FileJson size={18} />
+              {isExportingFullGstr1Json ? 'Building…' : 'Full GSTR-1 JSON'}
+            </button>
+          )}
+          {activeReportId === 'gst' && GST_SUBS_PORTAL_JSON.includes(activeGstSub) && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleExportGstPortalJson}
+              disabled={
+                isExportingPortalJson || isExportingFullGstr1Json || gstInvoicesLoading
+              }
+              title="Current tab only — slice JSON for GST offline tool"
+            >
+              <FileJson size={18} />
+              {isExportingPortalJson ? 'Exporting…' : 'Tab JSON'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -870,9 +1082,9 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2B – Registered outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                Invoices with a valid buyer GSTIN (excludes your company GSTIN). Count: {b2bRows.length}
+                Party master: <code>gst_no</code> filled and <code>gst_reg</code> = 1. Count: {b2bRows.length}
               </p>
-              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -946,9 +1158,10 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2C – Unregistered / retail outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                Invoices without a valid buyer GSTIN on record. Count: {b2cRows.length}
+                All others (no party match, empty <code>gst_no</code>, or <code>gst_reg</code> ≠ 1). Count:{' '}
+                {b2cRows.length}
               </p>
-              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -1022,9 +1235,9 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2B – HSN summary</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                HSN-wise totals for B2B invoices only ({b2bInvoices.length} invoices).
+                HSN-wise totals for party-B2B invoices only ({b2bInvoices.length} invoices).
               </p>
-              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -1103,9 +1316,9 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2C – HSN summary</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                HSN-wise totals for B2C invoices only ({b2cInvoices.length} invoices).
+                HSN-wise totals for non–party-B2B invoices ({b2cInvoices.length} invoices).
               </p>
-              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -1147,6 +1360,84 @@ export default function Reports() {
                       </tr>
                     </tfoot>
                   )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'doc-summary' && (
+            <div className="gstr1-report doc-issued-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">Summary of documents issued during the tax period</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                Same date range as GSTR-1. Rows group by document type (invoice vs credit/debit note). Serial range uses
+                trailing numbers in invoice no. when possible; otherwise full number as printed. Cancelled ={' '}
+                <code>status</code> cancelled or flags <code>cancelled</code> / <code>is_cancelled</code>.
+              </p>
+              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table doc-issued-table">
+                  <thead>
+                    <tr className="doc-issued-grand-total">
+                      <th colSpan={3} className="text-left text-muted" style={{ fontWeight: 600 }}>
+                        Period total
+                      </th>
+                      <th className="text-right">{documentIssuedSummary.grandTotal}</th>
+                      <th className="text-right">{documentIssuedSummary.grandCancelled}</th>
+                    </tr>
+                    <tr>
+                      <th>Nature of document</th>
+                      <th>Sr. No. From</th>
+                      <th>Sr. No. To</th>
+                      <th className="text-right">Total Number</th>
+                      <th className="text-right">Cancelled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documentIssuedSummary.rows.length === 0 && !gstInvoicesLoading && (
+                      <tr>
+                        <td colSpan={5} className="text-center text-muted">
+                          No documents in this range.
+                        </td>
+                      </tr>
+                    )}
+                    {documentIssuedSummary.rows.map((row) => (
+                      <tr key={row.nature}>
+                        <td>{row.nature}</td>
+                        <td>{row.srFrom}</td>
+                        <td>{row.srTo}</td>
+                        <td className="text-right">{row.totalNumber}</td>
+                        <td className="text-right">{row.cancelled}</td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             </div>
