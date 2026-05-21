@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar, FileJson } from 'lucide-react'
+import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar, FileJson, Banknote } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { getAuthToken } from '../lib/authToken'
 import { formatCurrency, formatDate } from '../utils/format'
 import { buildGstr1JsonPayload, downloadJson } from '../utils/gstr1JsonExport'
+import { getPendingAmount } from '../utils/invoicePayment'
+import PayInModal from '../components/PayInModal'
 import InvoicePreviewModal from './InvoicePreviewModal'
 import './Invoices.css'
 
@@ -19,19 +21,6 @@ function exceedsOneMonthRange(fromStr, toStr) {
   return diffDays > 30
 }
 
-/** Pending / outstanding for one row: balance → paylater → else unpaid status = full amount. */
-function getPendingAmount(inv) {
-  const bal = Number(inv.balance)
-  if (!Number.isNaN(bal) && bal > 0.005) return bal
-  const pl = Number(inv.paylater)
-  if (!Number.isNaN(pl) && pl > 0.005) return pl
-  const st = String(inv.status || '').toLowerCase()
-  if (st === 'pending' || st === 'unpaid' || st === 'overdue') {
-    return Number(inv.payment ?? inv.amount) || 0
-  }
-  return 0
-}
-
 export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -43,6 +32,7 @@ export default function Invoices() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
   const [previewInvId, setPreviewInvId] = useState(null)
+  const [payInTarget, setPayInTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
@@ -437,13 +427,31 @@ export default function Invoices() {
                   <td>{inv.dateFormatted}</td>
                   <td>{inv.customerName}</td>
                   <td>{inv.amountFormatted}</td>
-                  <td>
+                  <td className="inv-status-cell">
                     <span className={`badge badge--${inv.statusClass}`}>
                       {inv.statusDisplay}
                     </span>
+                    {String(inv.status || '').toLowerCase() === 'pending' &&
+                      !Number.isNaN(Number(inv.balance)) &&
+                      Number(inv.balance) > 0 && (
+                        <div className="inv-status-balance">
+                          Balance {formatCurrency(Number(inv.balance))}
+                        </div>
+                      )}
                   </td>
                   <td>
                     <div className="action-btns">
+                      {getPendingAmount(inv) > 0.005 && (
+                        <button
+                          type="button"
+                          className="btn-icon btn-icon--pay"
+                          aria-label="Record payment"
+                          title="Pay In – record received payment"
+                          onClick={() => setPayInTarget({ id: inv.id, listInvoice: inv })}
+                        >
+                          <Banknote size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-icon"
@@ -569,6 +577,18 @@ export default function Invoices() {
         <InvoicePreviewModal
           invId={previewInvId}
           onClose={() => setPreviewInvId(null)}
+          onRecordPayment={(invRow) => {
+            setPreviewInvId(null)
+            setPayInTarget({ id: invRow.id ?? previewInvId, listInvoice: invRow })
+          }}
+        />
+      )}
+      {payInTarget && (
+        <PayInModal
+          invId={payInTarget.id}
+          listInvoice={payInTarget.listInvoice}
+          onClose={() => setPayInTarget(null)}
+          onSuccess={() => refetch()}
         />
       )}
     </div>

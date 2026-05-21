@@ -20,6 +20,11 @@ import {
   mergePartyGstOntoInvoices,
 } from '../utils/partyB2b'
 import {
+  buildPurchaseRegisterRows,
+  formatRegisterGstin,
+  summarizePurchaseItcTotals,
+} from '../utils/purchaseRegister'
+import {
   buildCombinedGstr1PortalPayload,
   buildPortalSlicePayload,
   getB2bPortalSkippedInvoices,
@@ -182,59 +187,6 @@ const gstSubOptions = [
   { id: 'gst-rate', title: 'GST Rate Report' },
 ]
 
-/** GST % from purchase API — Tax rate column shows this only (no derived % when present). */
-function pickPurchaseGstPercent(po) {
-  const keys = ['gst', 'gst_rate', 'gst_percent', 'gstper', 'gstpct', 'tax_rate', 'taxRate']
-  for (const k of keys) {
-    const v = po[k]
-    if (v != null && v !== '') {
-      const n = Number(v)
-      if (!Number.isNaN(n)) return n
-    }
-  }
-  return null
-}
-
-/** Purchase bills → same column logic as sales (Value, taxes, POS) */
-function buildPurchaseRegisterRows(purchases) {
-  return purchases.map((po) => {
-    const cgst = Number(po.cgst) || 0
-    const sgst = Number(po.sgst) || 0
-    const igst = Number(po.igst) || 0
-    const totalTax = cgst + sgst + igst
-    const billValue = Number(po.amount) || Number(po.total) || Number(po.payment) || 0
-    const taxableFromApi = Number(po.taxable_amt)
-    const taxableComputed = billValue - totalTax
-    const safeTaxable =
-      !Number.isNaN(taxableFromApi) && taxableFromApi > 0
-        ? taxableFromApi
-        : taxableComputed > 0
-          ? taxableComputed
-          : billValue
-    const gstFromApi = pickPurchaseGstPercent(po)
-    /** Pehle response ka `gst` (ya alias); na ho to taxable se derive */
-    const taxRate =
-      gstFromApi != null
-        ? gstFromApi
-        : safeTaxable > 0
-          ? (totalTax / safeTaxable) * 100
-          : 0
-    return {
-      gstin: po.vendor_gstin ?? po.gstin ?? po.gst_no ?? po.gstin_no,
-      partyName: po.vendor ?? po.vendor_name ?? po.partyname ?? po.billing_name,
-      invNo: po.inv_no ?? po.po_no ?? po.bill_no ?? po.id,
-      date: po.dt ?? po.date,
-      value: billValue,
-      taxRate,
-      taxableValue: safeTaxable,
-      integratedTaxDisplay: igst,
-      centralTaxDisplay: cgst,
-      stateTaxDisplay: sgst,
-      placeOfSupply: po.state ?? po.place_of_supply ?? po.state_name ?? po.pos,
-    }
-  })
-}
-
 /** Invoice line → outward supply totals (same basis as GSTR-1 table) */
 function summarizeOutwardSupplies(invoices) {
   let taxable = 0
@@ -259,29 +211,6 @@ function summarizeOutwardSupplies(invoices) {
   return { taxable, igst, cgst, sgst, invoiceValue, totalTax: igst + cgst + sgst }
 }
 
-/** Purchase bills → ITC-style totals (when API sends cgst/sgst/igst) */
-function summarizePurchaseItc(purchases) {
-  let taxable = 0
-  let igst = 0
-  let cgst = 0
-  let sgst = 0
-  let gross = 0
-  for (const po of purchases) {
-    const c = Number(po.cgst) || 0
-    const s = Number(po.sgst) || 0
-    const i = Number(po.igst) || 0
-    const totalTax = c + s + i
-    const val = Number(po.amount) || Number(po.total) || Number(po.payment) || 0
-    const tv = val - totalTax
-    const safeTaxable = tv > 0 ? tv : val
-    taxable += safeTaxable
-    igst += i
-    cgst += c
-    sgst += s
-    gross += val
-  }
-  return { taxable, igst, cgst, sgst, gross, totalTax: igst + cgst + sgst }
-}
 export default function Reports() {
   const [dateRange, setDateRange] = useState('current-month')
   const [activeReportId, setActiveReportId] = useState('purchase')
@@ -367,6 +296,15 @@ export default function Reports() {
   const { data: customersData, isLoading: customersForB2Loading } = useGetCustomersQuery(undefined, {
     skip: !(activeReportId === 'gst' && GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub)),
   })
+
+  const { data: vendorData } = useGetCustomersQuery(
+    { prtytyp: 1 },
+    { skip: !(activeReportId === 'gst' && activeGstSub === 'purchase-reg') }
+  )
+  const vendorPartyByPid = useMemo(
+    () => buildPartyMapByPid(vendorData?.data ?? []),
+    [vendorData?.data]
+  )
 
   const partyByPid = useMemo(
     () => buildPartyMapByPid(customersData?.data ?? []),
@@ -458,7 +396,7 @@ export default function Reports() {
       : gstr3bPurchasesRaw
 
   const outward3b = summarizeOutwardSupplies(gstr3bInvoicesFiltered)
-  const itc3b = summarizePurchaseItc(gstr3bPurchasesFiltered)
+  const itc3b = summarizePurchaseItcTotals(gstr3bPurchasesFiltered)
   const net3b = {
     igst: outward3b.igst - itc3b.igst,
     cgst: outward3b.cgst - itc3b.cgst,
@@ -474,13 +412,13 @@ export default function Reports() {
           return d != null && d >= purchaseRegFrom && d <= purchaseRegTo
         })
       : purchaseRegRaw
-  const purchaseRegRows = buildPurchaseRegisterRows(purchaseRegFiltered)
+  const purchaseRegRows = buildPurchaseRegisterRows(purchaseRegFiltered, vendorPartyByPid)
   const purchaseRegTotals = purchaseRegRows.length
     ? {
         taxable: purchaseRegRows.reduce((s, r) => s + (r.taxableValue || 0), 0),
-        igst: purchaseRegRows.reduce((s, r) => s + (r.integratedTaxDisplay || 0), 0),
-        cgst: purchaseRegRows.reduce((s, r) => s + (r.centralTaxDisplay || 0), 0),
-        sgst: purchaseRegRows.reduce((s, r) => s + (r.stateTaxDisplay || 0), 0),
+        igst: purchaseRegRows.reduce((s, r) => s + (r.igst || 0), 0),
+        cgst: purchaseRegRows.reduce((s, r) => s + (r.cgst || 0), 0),
+        sgst: purchaseRegRows.reduce((s, r) => s + (r.sgst || 0), 0),
         value: purchaseRegRows.reduce((s, r) => s + (r.value || 0), 0),
       }
     : null
@@ -1602,27 +1540,27 @@ export default function Reports() {
                   </label>
                 </div>
               </div>
-              <h2 className="gst-rate-title">Purchase register – Inward supplies (ITC)</h2>
-              {/* <p className="report-placeholder text-muted gstr3b-note">
-                GSTR-2B reconciliation ke liye vendor GSTIN, bill value aur tax break-up saath rakhna chahiye. Column mapping sales (GSTR-1) jaisi hai:
-                Integrated = SGST, Central = IGST, State = CGST.
-              </p> */}
+              <h2 className="gst-rate-title">Purchase register – Inward supplies (GSTR-2B / ITC)</h2>
+              <p className="report-placeholder text-muted gstr3b-note" style={{ marginBottom: '0.75rem' }}>
+                GSTR-2B style: IGST = integrated tax, CGST = central tax, SGST = state tax. Tax rate is GST % (not tax
+                amount). Intra-state bills split tax into CGST + SGST; inter-state into IGST.
+              </p>
               {purchaseRegLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
-                <table className="gst-rate-table">
+                <table className="gst-rate-table purchase-reg-gstr2b-table">
                   <thead>
                     <tr>
                       <th>Sno.</th>
-                      <th>Vendor GSTIN</th>
-                      <th>Vendor / Party</th>
-                      <th>Bill no.</th>
-                      <th>Date</th>
-                      <th className="text-right">Value</th>
-                      <th className="text-right">Tax rate</th>
+                      <th>GSTIN of supplier</th>
+                      <th>Trade / legal name</th>
+                      <th>Invoice no.</th>
+                      <th>Invoice date</th>
+                      <th className="text-right">Invoice value</th>
+                      <th className="text-right">Rate (%)</th>
                       <th className="text-right">Taxable value</th>
-                      <th className="text-right">Integrated tax</th>
-                      <th className="text-right">Central tax</th>
-                      <th className="text-right">State tax</th>
+                      <th className="text-right">Integrated tax (IGST)</th>
+                      <th className="text-right">Central tax (CGST)</th>
+                      <th className="text-right">State / UT tax (SGST)</th>
                       <th>Place of supply</th>
                     </tr>
                   </thead>
@@ -1630,17 +1568,19 @@ export default function Reports() {
                     {purchaseRegRows.map((row, i) => (
                       <tr key={i}>
                         <td>{i + 1}</td>
-                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{formatRegisterGstin(row.gstin)}</td>
                         <td>{getDisplayValue(row.partyName)}</td>
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
                         <td className="text-right">{formatReportAmount(row.value)}</td>
-                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">
+                          {row.taxRate > 0 ? `${Number(row.taxRate).toFixed(0)}%` : '—'}
+                        </td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
-                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
-                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
-                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
-                        <td>{getDisplayValue(row.placeOfSupply)}</td>
+                        <td className="text-right">{formatReportAmount(row.igst)}</td>
+                        <td className="text-right">{formatReportAmount(row.cgst)}</td>
+                        <td className="text-right">{formatReportAmount(row.sgst)}</td>
+                        <td>{row.placeOfSupply || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -69,7 +69,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     login: builder.mutation({
@@ -122,6 +122,13 @@ export const billingApi = createApi({
       query: (id) => ({ url: `/invoices/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Invoice', 'Dashboard'],
     }),
+
+    /** Customer payment against invoice (partial / full). Body: party_id, inv_id, dt?, amount?, payby?, description?, referal? */
+    createPayIn: builder.mutation({
+      query: (body) => ({ url: '/pay-in', method: 'POST', body }),
+      invalidatesTags: ['Invoice', 'Dashboard', 'Ledger'],
+    }),
+
     // Purchase orders
     getPurchaseOrders: builder.query({
       query: (arg) => {
@@ -335,6 +342,7 @@ export const {
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCreatePayInMutation,
   useGetPurchaseOrdersQuery,
   useGetPurchaseByIdQuery,
   useCreatePurchaseOrderMutation,

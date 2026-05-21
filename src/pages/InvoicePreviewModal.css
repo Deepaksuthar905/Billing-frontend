@@ -33,6 +33,12 @@
   transition: background 0.15s;
 }
 
+.inv-action-btn--pay {
+  background: #059669;
+  color: #fff;
+}
+.inv-action-btn--pay:hover { background: #047857; }
+
 .inv-action-btn--pdf {
   background: #6366f1;
   color: #fff;
