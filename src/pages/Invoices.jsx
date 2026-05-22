@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
@@ -41,6 +41,10 @@ export default function Invoices() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
   const [previewInvId, setPreviewInvId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const selectAllRef = useRef(null)
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
 
@@ -78,6 +82,40 @@ export default function Invoices() {
         ? a.rawDate - b.rawDate
         : b.rawDate - a.rawDate
     )
+
+  const allVisibleSelected =
+    invoices.length > 0 && invoices.every((inv) => selectedIds.has(inv.id))
+  const someVisibleSelected = invoices.some((inv) => selectedIds.has(inv.id))
+
+  useEffect(() => {
+    const el = selectAllRef.current
+    if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected
+  }, [someVisibleSelected, allVisibleSelected])
+
+  const selectedCount = selectedIds.size
+
+  const toggleSelectId = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        invoices.forEach((inv) => next.delete(inv.id))
+      } else {
+        invoices.forEach((inv) => next.add(inv.id))
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
 
   const { sumTotal, sumPending } = invoices.reduce(
     (acc, inv) => {
@@ -244,12 +282,42 @@ export default function Invoices() {
           </div>
         </div>
 
+        {selectedCount > 0 && (
+          <div className="inv-bulk-bar">
+            <span className="inv-bulk-bar-text">
+              {selectedCount} selected
+            </span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={clearSelection}>
+              Clear
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 size={16} />
+              Delete selected
+            </button>
+          </div>
+        )}
+
         {isLoading && !data && <div className="page-loading">Loading...</div>}
 
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
+                <th className="inv-col-check">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    className="inv-row-check"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    disabled={invoices.length === 0}
+                    aria-label="Select all visible invoices"
+                  />
+                </th>
                 <th>Invoice #</th>
                 <th>Date</th>
                 <th>Customer</th>
@@ -261,13 +329,22 @@ export default function Invoices() {
             <tbody>
               {invoices.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted">
+                  <td colSpan={7} className="text-center text-muted">
                     No invoices found. <Link to="/invoices/new">Create one</Link>.
                   </td>
                 </tr>
               )}
               {invoices.map((inv) => (
                 <tr key={inv.id}>
+                  <td className="inv-col-check">
+                    <input
+                      type="checkbox"
+                      className="inv-row-check"
+                      checked={selectedIds.has(inv.id)}
+                      onChange={() => toggleSelectId(inv.id)}
+                      aria-label={`Select invoice ${inv.invNoStr}`}
+                    />
+                  </td>
                   <td className="font-medium">{inv.inv_no ?? inv.invoice_no ?? inv.id}</td>
                   <td>{inv.dateFormatted}</td>
                   <td>{inv.customerName}</td>
@@ -306,6 +383,59 @@ export default function Invoices() {
           </table>
         </div>
       </div>
+      {bulkDeleteOpen && (
+        <div className="modal-overlay" onClick={() => !isBulkDeleting && setBulkDeleteOpen(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Delete invoices</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text, #1f2937)' }}>
+                Delete {selectedCount} invoice{selectedCount === 1 ? '' : 's'}? This cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setBulkDeleteOpen(false)}
+                disabled={isBulkDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={isBulkDeleting}
+                onClick={async () => {
+                  const ids = [...selectedIds]
+                  setIsBulkDeleting(true)
+                  let failed = 0
+                  try {
+                    for (const id of ids) {
+                      try {
+                        await deleteInvoice(id).unwrap()
+                      } catch {
+                        failed += 1
+                      }
+                    }
+                    setBulkDeleteOpen(false)
+                    clearSelection()
+                    refetch()
+                    if (failed > 0) {
+                      alert(`${failed} invoice(s) could not be deleted. Others were removed.`)
+                    }
+                  } finally {
+                    setIsBulkDeleting(false)
+                  }
+                }}
+              >
+                {isBulkDeleting ? 'Deleting...' : 'Delete all'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {deleteTargetId && (
         <div className="modal-overlay" onClick={() => setDeleteTargetId(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>

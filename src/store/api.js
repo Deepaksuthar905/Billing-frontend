@@ -74,6 +74,11 @@ export const billingApi = createApi({
       providesTags: ['Dashboard'],
     }),
 
+    getPayByList: builder.query({
+      query: () => ({ url: '/pay-by', method: 'GET' }),
+      transformResponse: normalizeList,
+    }),
+
     // Invoices
     getInvoices: builder.query({
       query: ({ search, status, from, to } = {}) => {
@@ -205,10 +210,13 @@ export const billingApi = createApi({
 
     // Ledger
     getLedger: builder.query({
-      query: ({ from, to }) => ({
-        url: `/ledger?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        method: 'POST',
-      }),
+      query: ({ from, to, pbid }) => {
+        const params = new URLSearchParams()
+        params.set('from', from)
+        params.set('to', to)
+        if (pbid != null && pbid !== '') params.set('pbid', String(pbid))
+        return { url: `/ledger?${params.toString()}`, method: 'POST' }
+      },
       transformResponse: (r) => ({
         entries: Array.isArray(r?.entries) ? r.entries : [],
         summary: r?.summary ?? null,
@@ -259,6 +267,7 @@ export const billingApi = createApi({
 
 export const {
   useGetDashboardQuery,
+  useGetPayByListQuery,
   useGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useCreateInvoiceMutation,
