@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { getAuthToken } from '../lib/authToken'
 
 /** Live Laravel API; override with VITE_API_BASE_URL for local (e.g. http://127.0.0.1:8000/api) */
 const DEFAULT_API_BASE = 'https://superplayerauction.com/billing/api'
@@ -58,15 +59,27 @@ export const billingApi = createApi({
   reducerPath: 'billingApi',
   baseQuery: fetchBaseQuery({
     baseUrl,
-    prepareHeaders: (headers) => {
+    prepareHeaders: (headers, { endpoint }) => {
       headers.set('Content-Type', 'application/json')
-      // Agar auth use karte ho to: const token = getState().auth?.token; if (token) headers.set('Authorization', `Bearer ${token}`)
+      /** Do not send Bearer on `/login` — avoids stale token breaking auth. */
+      if (endpoint !== 'login') {
+        const token = getAuthToken()
+        if (token) headers.set('Authorization', `Bearer ${token}`)
+      }
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
+    login: builder.mutation({
+      query: ({ email, password }) => ({
+        url: '/login',
+        method: 'POST',
+        body: { email, password },
+      }),
+    }),
+
     // Dashboard – ek hi call, sab stats + recent lists
     getDashboard: builder.query({
       query: () => ({ url: '/dashboard', method: 'GET' }),
@@ -109,6 +122,13 @@ export const billingApi = createApi({
       query: (id) => ({ url: `/invoices/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Invoice', 'Dashboard'],
     }),
+
+    /** Customer payment against invoice (partial / full). Body: party_id, inv_id, dt?, amount?, payby?, description?, referal? */
+    createPayIn: builder.mutation({
+      query: (body) => ({ url: '/pay-in', method: 'POST', body }),
+      invalidatesTags: ['Invoice', 'Dashboard', 'Ledger'],
+    }),
+
     // Purchase orders
     getPurchaseOrders: builder.query({
       query: (arg) => {
@@ -128,9 +148,22 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'PurchaseOrder', id })), 'PurchaseOrder']
           : ['PurchaseOrder'],
     }),
+    getPurchaseById: builder.query({
+      query: (prid) => ({ url: `/purchases/${prid}` }),
+      transformResponse: (r) => {
+        if (!r || typeof r !== 'object') return null
+        if (r.data && typeof r.data === 'object' && !Array.isArray(r.data)) return r.data
+        return r
+      },
+      providesTags: (_r, _e, prid) => [{ type: 'PurchaseOrder', id: prid }, 'PurchaseOrder'],
+    }),
     createPurchaseOrder: builder.mutation({
       query: (body) => ({ url: '/purchases', method: 'POST', body }),
       invalidatesTags: ['PurchaseOrder', 'Dashboard', 'Vendor'],
+    }),
+    updatePurchaseOrder: builder.mutation({
+      query: ({ prid, ...body }) => ({ url: `/purchases/${prid}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { prid }) => [{ type: 'PurchaseOrder', id: prid }, 'PurchaseOrder', 'Dashboard', 'Vendor'],
     }),
     deletePurchaseOrder: builder.mutation({
       query: (id) => ({ url: `/delpurchase/${id}`, method: 'POST' }),
@@ -160,10 +193,22 @@ export const billingApi = createApi({
         const search = typeof arg === 'string' ? arg : arg?.search
         const prtytyp = typeof arg === 'object' && arg?.prtytyp !== undefined ? arg.prtytyp : undefined
         if (search) params.set('search', search)
-        if (prtytyp !== undefined) params.set('prtytyp', prtytyp)
+        /** Send prtytyp only for vendor party types (1 = purchase vendor, 2 = expense vendor). */
+        if (prtytyp !== undefined && prtytyp !== null && prtytyp !== '') {
+          const partyType = Number(prtytyp)
+          if (partyType === 1 || partyType === 2) params.set('prtytyp', String(partyType))
+        }
         return { url: params.toString() ? `/customers?${params}` : '/customers' }
       },
-      transformResponse: normalizeList,
+      transformResponse: (response) => {
+        // Keep extra keys (e.g. { payby: [...] }) while still normalizing list shape.
+        if (Array.isArray(response)) return { data: response }
+        if (response && typeof response === 'object') {
+          const normalized = normalizeList(response)
+          return { ...response, data: normalized.data ?? [] }
+        }
+        return normalizeList(response)
+      },
       providesTags: (result) =>
         result?.data
           ? [...result.data.map(({ id }) => ({ type: 'Customer', id })), 'Customer']
@@ -172,6 +217,16 @@ export const billingApi = createApi({
     createCustomer: builder.mutation({
       query: (body) => ({ url: '/parties', method: 'POST', body }),
       invalidatesTags: ['Customer'],
+    }),
+    updateCustomer: builder.mutation({
+      query: ({ pid, id, ...body }) => {
+        const partyId = pid ?? id
+        return { url: `/parties/${partyId}`, method: 'POST', body }
+      },
+      invalidatesTags: (_r, _e, arg) => {
+        const listId = arg?.pid ?? arg?.id
+        return listId != null ? [{ type: 'Customer', id: listId }, 'Customer'] : ['Customer']
+      },
     }),
 
     // Items / Inventory
@@ -254,9 +309,22 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'Expense', id })), 'Expense']
           : ['Expense'],
     }),
+    getExpenseById: builder.query({
+      query: (exid) => ({ url: `/expenses/${exid}` }),
+      transformResponse: (r) => {
+        if (!r || typeof r !== 'object') return null
+        if (r.data && typeof r.data === 'object' && !Array.isArray(r.data)) return r.data
+        return r
+      },
+      providesTags: (_r, _e, exid) => [{ type: 'Expense', id: exid }, 'Expense'],
+    }),
     createExpense: builder.mutation({
       query: (body) => ({ url: '/expenses', method: 'POST', body }),
       invalidatesTags: ['Expense', 'Dashboard'],
+    }),
+    updateExpense: builder.mutation({
+      query: ({ exid, ...body }) => ({ url: `/expenses/${exid}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { exid }) => [{ type: 'Expense', id: exid }, 'Expense', 'ExpenseHead', 'Dashboard'],
     }),
     deleteExpense: builder.mutation({
       query: (exid) => ({ url: `/delexpenses/${exid}`, method: 'POST' }),
@@ -266,6 +334,7 @@ export const billingApi = createApi({
 })
 
 export const {
+  useLoginMutation,
   useGetDashboardQuery,
   useGetPayByListQuery,
   useGetInvoicesQuery,
@@ -273,13 +342,17 @@ export const {
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCreatePayInMutation,
   useGetPurchaseOrdersQuery,
+  useGetPurchaseByIdQuery,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
   useDeletePurchaseOrderMutation,
   useGetGstRateReportQuery,
   useGetVendorsQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
+  useUpdateCustomerMutation,
   useGetItemsQuery,
   useCreateItemMutation,
   useUpdateItemMutation,
@@ -287,7 +360,9 @@ export const {
   useGetExpenseHeadsQuery,
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,
+  useGetExpenseByIdQuery,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
   useDeleteExpenseMutation,
   useGetExpenseReportQuery,
 } = billingApi

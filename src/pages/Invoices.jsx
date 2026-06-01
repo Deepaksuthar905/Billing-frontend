@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Eye, Edit, RefreshCw, Trash2, Hash, Calendar, ArrowUpDown } from 'lucide-react'
+import { Plus, Eye, Edit, RefreshCw, Trash2, Hash, Calendar, ArrowUpDown, FileJson, Banknote } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
+import { getAuthToken } from '../lib/authToken'
 import { formatCurrency, formatDate } from '../utils/format'
+import { buildGstr1JsonPayload, downloadJson } from '../utils/gstr1JsonExport'
+import { getPendingAmount } from '../utils/invoicePayment'
+import PayInModal from '../components/PayInModal'
 import InvoicePreviewModal from './InvoicePreviewModal'
 import './Invoices.css'
 
@@ -15,19 +19,6 @@ function exceedsOneMonthRange(fromStr, toStr) {
   if (a > b) return true
   const diffDays = Math.floor((b - a) / (24 * 60 * 60 * 1000))
   return diffDays > 30
-}
-
-/** Pending / outstanding for one row: balance → paylater → else unpaid status = full amount. */
-function getPendingAmount(inv) {
-  const bal = Number(inv.balance)
-  if (!Number.isNaN(bal) && bal > 0.005) return bal
-  const pl = Number(inv.paylater)
-  if (!Number.isNaN(pl) && pl > 0.005) return pl
-  const st = String(inv.status || '').toLowerCase()
-  if (st === 'pending' || st === 'unpaid' || st === 'overdue') {
-    return Number(inv.payment ?? inv.amount) || 0
-  }
-  return 0
 }
 
 function compareInvoices(a, b, sortBy) {
@@ -51,9 +42,11 @@ export default function Invoices() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
   const [previewInvId, setPreviewInvId] = useState(null)
+  const [payInTarget, setPayInTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [isExportingJson, setIsExportingJson] = useState(false)
   const selectAllRef = useRef(null)
 
   const [deleteInvoice, { isLoading: isDeleting }] = useDeleteInvoiceMutation()
@@ -133,6 +126,81 @@ export default function Invoices() {
     { sumTotal: 0, sumPending: 0 }
   )
 
+  const handleExportGstr1Json = async () => {
+    if (!invoices.length) {
+      alert('No invoices in the current filter to export.')
+      return
+    }
+    setIsExportingJson(true)
+    try {
+      const token = getAuthToken()
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+      const rows = await Promise.all(
+        invoices.map(async (inv) => {
+          const res = await fetch(`${API_BASE_URL}/invoices/${inv.id}`, { headers })
+          if (!res.ok) throw new Error(`Could not load invoice ${inv.invNoStr || inv.id} (${res.status})`)
+          const raw = await res.json()
+          return raw?.data ?? raw
+        })
+      )
+
+      /** Many APIs store buyer GSTIN only on customer master — merge for B2B export. */
+      let enrichedRows = rows
+      try {
+        const cr = await fetch(`${API_BASE_URL}/customers`, { headers })
+        if (cr.ok) {
+          const rawCustomers = await cr.json()
+          const list =
+            rawCustomers?.data ??
+            rawCustomers?.results ??
+            (Array.isArray(rawCustomers) ? rawCustomers : [])
+          const byPid = new Map()
+          for (const c of list) {
+            const id = c.pid ?? c.id
+            if (id != null) byPid.set(String(id), c)
+          }
+          enrichedRows = rows.map((inv) => {
+            const pid = inv.pid ?? inv.customer_id ?? inv.party_id
+            if (pid == null) return inv
+            const c = byPid.get(String(pid))
+            if (!c) return inv
+            const partyGst = String(c.gst_no ?? c.gstin ?? '')
+              .trim()
+            if (!partyGst) return inv
+            if (String(inv.gst_no ?? inv.customer_gstin ?? inv.buyer_gstin ?? '').replace(/\s/g, '').length >= 15) {
+              return inv
+            }
+            return { ...inv, gst_no: inv.gst_no || partyGst }
+          })
+        }
+      } catch (e) {
+        console.warn('Customer GST merge for export skipped:', e)
+      }
+
+      const anchor = filterFrom || filterTo || (enrichedRows[0] && (enrichedRows[0].dt ?? enrichedRows[0].date))
+      const { payload, skippedNoGstin } = buildGstr1JsonPayload(enrichedRows, {
+        anchorDateForFp: anchor,
+      })
+      if (!payload.b2b.length && skippedNoGstin.length) {
+        alert(
+          'No B2B rows: customer GSTIN missing or invalid on all invoices in this range. HSN / doc_issue still reflect all invoices.'
+        )
+      } else if (skippedNoGstin.length) {
+        alert(
+          `${skippedNoGstin.length} invoice(s) skipped in B2B (no valid buyer GSTIN): ${skippedNoGstin.slice(0, 8).join(', ')}${skippedNoGstin.length > 8 ? '…' : ''}`
+        )
+      }
+      const fn = `GSTR1_${payload.fp}_${payload.gstin}.json`.replace(/[/\\:*?"<>|]/g, '-')
+      downloadJson(fn, payload)
+    } catch (err) {
+      console.error('Export JSON failed:', err)
+      alert(err?.message || 'Export failed. Check console.')
+    } finally {
+      setIsExportingJson(false)
+    }
+  }
+
   const handleSync = async () => {
     const from = dateFrom || new Date().toISOString().slice(0, 10)
     const to = dateTo || new Date().toISOString().slice(0, 10)
@@ -187,6 +255,16 @@ export default function Invoices() {
               />
             </label>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportGstr1Json}
+            disabled={isExportingJson || isLoading}
+            title="Download GSTR-1 style JSON for the filtered date range (same rows as the table)"
+          >
+            <FileJson size={18} />
+            {isExportingJson ? 'Exporting…' : 'Export JSON'}
+          </button>
           <button
             type="button"
             className="btn btn-secondary"
@@ -360,13 +438,31 @@ export default function Invoices() {
                   <td>{inv.dateFormatted}</td>
                   <td>{inv.customerName}</td>
                   <td>{inv.amountFormatted}</td>
-                  <td>
+                  <td className="inv-status-cell">
                     <span className={`badge badge--${inv.statusClass}`}>
                       {inv.statusDisplay}
                     </span>
+                    {String(inv.status || '').toLowerCase() === 'pending' &&
+                      !Number.isNaN(Number(inv.balance)) &&
+                      Number(inv.balance) > 0 && (
+                        <div className="inv-status-balance">
+                          Balance {formatCurrency(Number(inv.balance))}
+                        </div>
+                      )}
                   </td>
                   <td>
                     <div className="action-btns">
+                      {getPendingAmount(inv) > 0.005 && (
+                        <button
+                          type="button"
+                          className="btn-icon btn-icon--pay"
+                          aria-label="Record payment"
+                          title="Pay In – record received payment"
+                          onClick={() => setPayInTarget({ id: inv.id, listInvoice: inv })}
+                        >
+                          <Banknote size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-icon"
@@ -492,6 +588,18 @@ export default function Invoices() {
         <InvoicePreviewModal
           invId={previewInvId}
           onClose={() => setPreviewInvId(null)}
+          onRecordPayment={(invRow) => {
+            setPreviewInvId(null)
+            setPayInTarget({ id: invRow.id ?? previewInvId, listInvoice: invRow })
+          }}
+        />
+      )}
+      {payInTarget && (
+        <PayInModal
+          invId={payInTarget.id}
+          listInvoice={payInTarget.listInvoice}
+          onClose={() => setPayInTarget(null)}
+          onSuccess={() => refetch()}
         />
       )}
     </div>

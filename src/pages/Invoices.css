@@ -75,6 +75,27 @@
   flex-wrap: wrap;
 }
 
+.inv-status-cell {
+  vertical-align: middle;
+}
+
+.inv-status-balance {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #b45309;
+  line-height: 1.2;
+}
+
+.btn-icon--pay {
+  color: #059669;
+}
+
+.btn-icon--pay:hover {
+  background: #ecfdf5;
+}
+
 .page-header-actions .btn {
   display: inline-flex;
   align-items: center;

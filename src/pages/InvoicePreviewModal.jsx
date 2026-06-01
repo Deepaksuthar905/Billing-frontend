@@ -1,7 +1,8 @@
 import { useRef } from 'react'
-import { X, Download } from 'lucide-react'
+import { X, Download, Banknote } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 import { useGetInvoiceByIdQuery } from '../store/api'
+import { getPendingAmount } from '../utils/invoicePayment'
 import './InvoicePreviewModal.css'
 
 /* ── Company Details (change here when logo is ready) ── */
@@ -49,7 +50,7 @@ function amountInWords(amt) {
 const n2 = (v) => Number(v || 0).toFixed(2)
 const fmt = (v) => `₹ ${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export default function InvoicePreviewModal({ invId, onClose }) {
+export default function InvoicePreviewModal({ invId, onClose, onRecordPayment }) {
   const printRef = useRef(null)
   const { data: raw, isLoading, isError } = useGetInvoiceByIdQuery(invId, { skip: !invId })
 
@@ -75,8 +76,9 @@ export default function InvoicePreviewModal({ invId, onClose }) {
   const totalAmt    = Number(inv.amount ?? inv.payment ?? 0)
   const taxableAmt  = totalAmt - totalTax > 0 ? totalAmt - totalTax : totalAmt
   const hsnCode     = items[0]?.hsn_code ?? items[0]?.hsn ?? inv.hsn ?? '998319'
-  const received    = Number(inv.received ?? inv.payment ?? totalAmt)
-  const balance     = totalAmt - received
+  const pendingDue  = getPendingAmount(inv)
+  const received    = Math.max(0, totalAmt - pendingDue)
+  const balance     = pendingDue > 0.005 ? pendingDue : Math.max(0, totalAmt - received)
   const isIgst      = igst > 0
 
   const handlePrint = () => {
@@ -99,6 +101,16 @@ export default function InvoicePreviewModal({ invId, onClose }) {
     <div className="inv-modal-overlay" onClick={onClose}>
       {/* Action bar — hidden during print */}
       <div className="inv-modal-actions no-print" onClick={(e) => e.stopPropagation()}>
+        {pendingDue > 0.005 && onRecordPayment && (
+          <button
+            type="button"
+            className="inv-action-btn inv-action-btn--pay"
+            onClick={() => onRecordPayment({ ...inv, id: inv.invid ?? inv.id ?? invId })}
+          >
+            <Banknote size={16} />
+            Record Pay In
+          </button>
+        )}
         <button type="button" className="inv-action-btn inv-action-btn--pdf" onClick={handlePrint}>
           <Download size={16} />
           Download PDF
