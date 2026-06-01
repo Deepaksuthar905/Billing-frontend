@@ -203,32 +203,19 @@
   font-size: 0.8rem;
 }
 
-.sort-btn {
+.inv-sort-field {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: var(--radius, 6px);
-  background: var(--card-bg, #fff);
-  color: var(--text-muted, #6b7280);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
+  gap: 0.4rem;
 }
 
-.sort-btn:hover {
-  border-color: var(--primary, #6366f1);
-  color: var(--primary, #6366f1);
-  background: var(--primary-light, #eef2ff);
+.inv-sort-field-icon {
+  color: var(--text-muted, #9ca3af);
+  flex-shrink: 0;
 }
 
-.sort-btn--active {
-  border-color: var(--primary, #6366f1);
-  color: var(--primary, #6366f1);
-  background: var(--primary-light, #eef2ff);
+.inv-sort-select {
+  min-width: 11.5rem;
 }
 
 .btn-clear-filter {
