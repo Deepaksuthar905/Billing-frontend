@@ -77,8 +77,65 @@
 }
 
 .exp-no-group,
-.exp-date-group {
+.exp-date-group,
+.exp-state-group {
   min-width: 140px;
+}
+
+.exp-state-group {
+  min-width: 180px;
+}
+
+.exp-gst-hint {
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 0.25rem;
+}
+
+.text-muted {
+  color: var(--text-muted, #6b7280);
+}
+
+.exp-items-table .price-type-select {
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  max-width: 110px;
+}
+
+.exp-items-table th.th-price-unit {
+  vertical-align: bottom;
+}
+
+.exp-items-table th.th-price-unit .th-main {
+  display: block;
+}
+
+.exp-items-table td.td-price-unit .form-input {
+  min-width: 90px;
+}
+
+.exp-gst-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-surface, #f9fafb);
+  border-radius: var(--radius, 6px);
+  border: 1px solid var(--border, #e5e7eb);
+  min-width: 200px;
+}
+
+.exp-gst-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.exp-gst-summary-row strong {
+  color: var(--text, #1f2937);
 }
 
 .exp-form-top-row .form-group label {

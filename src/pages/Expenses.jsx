@@ -47,6 +47,19 @@ function dateRangePresetToFromTo(preset) {
   return null
 }
 
+function compareExpenses(a, b, sortBy) {
+  if (sortBy === 'inv-asc' || sortBy === 'inv-desc') {
+    const cmp = a.receiptNoStr.localeCompare(b.receiptNoStr, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    })
+    return sortBy === 'inv-asc' ? cmp : -cmp
+  }
+  const diff = a.rawDate - b.rawDate
+  if (sortBy === 'date-asc') return diff
+  return -diff
+}
+
 export default function Expenses() {
   const [selectedHeadId, setSelectedHeadId] = useState(null)
   const [search, setSearch] = useState('')
@@ -56,6 +69,7 @@ export default function Expenses() {
   const [datePreset, setDatePreset] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [sortBy, setSortBy] = useState('date-desc')
 
   const [deleteExpense, { isLoading: isDeleting }] = useDeleteExpenseMutation()
 
@@ -120,15 +134,24 @@ export default function Expenses() {
     ? dateFilteredExpenses.filter((e) => String(e.exhid) === String(selectedHeadId))
     : dateFilteredExpenses
 
-  const filteredExpenses = visibleExpenses.filter((e) => {
-    const q = rightSearch.toLowerCase()
-    return (
-      !q ||
-      String(e.receipt_no ?? e.exid ?? '').toLowerCase().includes(q) ||
-      (e.party_relation?.partyname ?? '').toLowerCase().includes(q) ||
-      (e.description ?? '').toLowerCase().includes(q)
-    )
-  })
+  const filteredExpenses = useMemo(() => {
+    const q = rightSearch.trim().toLowerCase()
+    return visibleExpenses
+      .filter((e) => {
+        return (
+          !q ||
+          String(e.receipt_no ?? e.exid ?? '').toLowerCase().includes(q) ||
+          (e.party_relation?.partyname ?? '').toLowerCase().includes(q) ||
+          (e.description ?? '').toLowerCase().includes(q)
+        )
+      })
+      .map((e) => ({
+        ...e,
+        receiptNoStr: String(e.receipt_no ?? e.exid ?? ''),
+        rawDate: new Date(e.dt ?? 0).getTime(),
+      }))
+      .sort((a, b) => compareExpenses(a, b, sortBy))
+  }, [visibleExpenses, rightSearch, sortBy])
 
   const panelTotal = selectedHeadId
     ? headTotals[String(selectedHeadId)] || 0
@@ -240,6 +263,17 @@ export default function Expenses() {
                   }}
                   aria-label="To date"
                 />
+                <select
+                  className="exp-select exp-sort-select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  aria-label="Sort expenses"
+                >
+                  <option value="date-asc">ASC by date</option>
+                  <option value="date-desc">DESC by date</option>
+                  <option value="inv-asc">ASC by inv</option>
+                  <option value="inv-desc">DESC by inv</option>
+                </select>
               </div>
 
               <div className="exp-search-box">
