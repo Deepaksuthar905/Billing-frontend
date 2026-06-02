@@ -309,6 +309,20 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'Expense', id })), 'Expense']
           : ['Expense'],
     }),
+
+    // Pay-in list
+    getPayInList: builder.query({
+      query: () => ({ url: '/pay-in' }),
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map((r) => ({ type: 'PayIn', id: r.pinid ?? r.id })), 'PayIn']
+          : ['PayIn'],
+    }),
+    deletePayIn: builder.mutation({
+      query: (pinid) => ({ url: `/delpay-in/${pinid}`, method: 'POST' }),
+      invalidatesTags: ['PayIn'],
+    }),
     getExpenseById: builder.query({
       query: (exid) => ({ url: `/expenses/${exid}` }),
       transformResponse: (r) => {
@@ -358,6 +372,8 @@ export const {
   useUpdateItemMutation,
   useGetLedgerQuery,
   useGetExpenseHeadsQuery,
+  useGetPayInListQuery,
+  useDeletePayInMutation,
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,
   useGetExpenseByIdQuery,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Edit, Plus, Search, Trash2 } from 'lucide-react'
 import { useGetExpenseHeadsQuery, useGetExpensesQuery, useDeleteExpenseMutation } from '../store/api'
@@ -7,11 +7,55 @@ import './Expenses.css'
 
 const PAYBY_LABELS = { 0: 'Cash', 1: 'Bank', 2: 'UPI', 3: 'Cheque' }
 
+/** YYYY-MM-DD from API date (avoids timezone shifting whole-day compares). */
+function parseIsoDatePart(value) {
+  if (value == null || value === '') return null
+  const m = String(value).match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : null
+}
+
+function toYmdLocal(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function rollingDaysFromTo(numDays) {
+  const today = new Date()
+  const end = toYmdLocal(today)
+  const start = new Date(today)
+  start.setDate(start.getDate() - (numDays - 1))
+  return { from: toYmdLocal(start), to: end }
+}
+
+function dateRangePresetToFromTo(preset) {
+  const today = new Date()
+  const endToday = toYmdLocal(today)
+  if (preset === 'current-month') {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1)
+    return { from: toYmdLocal(start), to: endToday }
+  }
+  if (preset === 'last-month') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    const end = new Date(today.getFullYear(), today.getMonth(), 0)
+    return { from: toYmdLocal(start), to: toYmdLocal(end) }
+  }
+  if (preset === '7d') return rollingDaysFromTo(7)
+  if (preset === '30d') return rollingDaysFromTo(30)
+  if (preset === '90d') return rollingDaysFromTo(90)
+  return null
+}
+
 export default function Expenses() {
   const [selectedHeadId, setSelectedHeadId] = useState(null)
   const [search, setSearch] = useState('')
   const [rightSearch, setRightSearch] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
+
+  const [datePreset, setDatePreset] = useState('all')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   const [deleteExpense, { isLoading: isDeleting }] = useDeleteExpenseMutation()
 
@@ -25,6 +69,44 @@ export default function Expenses() {
   const allHeads = headsData?.data ?? []
   const allExpenses = expensesData?.data ?? []
 
+  useEffect(() => {
+    if (datePreset === 'custom') return
+    if (datePreset === 'all') {
+      setFrom('')
+      setTo('')
+      return
+    }
+    const r = dateRangePresetToFromTo(datePreset)
+    if (r) {
+      setFrom(r.from)
+      setTo(r.to)
+    }
+  }, [datePreset])
+
+  const dateFilteredExpenses = useMemo(() => {
+    const ymdFrom = from || null
+    const ymdTo = to || null
+    if (!ymdFrom && !ymdTo) return allExpenses
+    return allExpenses.filter((e) => {
+      const ymd = parseIsoDatePart(e.dt)
+      if (!ymd) return false
+      if (ymdFrom && ymd < ymdFrom) return false
+      if (ymdTo && ymd > ymdTo) return false
+      return true
+    })
+  }, [allExpenses, from, to])
+
+  const headTotals = useMemo(() => {
+    return dateFilteredExpenses.reduce((acc, e) => {
+      const key = String(
+        e.exhid ?? e.exp_head_id ?? e.expenses_head?.exhid ?? e.expenses_head?.id ?? ''
+      )
+      if (!key) return acc
+      acc[key] = (acc[key] || 0) + (Number(e.payment) || 0)
+      return acc
+    }, {})
+  }, [dateFilteredExpenses])
+
   const filteredHeads = allHeads.filter((h) =>
     (h.name ?? '').toLowerCase().includes(search.toLowerCase())
   )
@@ -35,8 +117,8 @@ export default function Expenses() {
 
   // null = show all, otherwise filter by selected exhid
   const visibleExpenses = selectedHeadId
-    ? allExpenses.filter((e) => String(e.exhid) === String(selectedHeadId))
-    : allExpenses
+    ? dateFilteredExpenses.filter((e) => String(e.exhid) === String(selectedHeadId))
+    : dateFilteredExpenses
 
   const filteredExpenses = visibleExpenses.filter((e) => {
     const q = rightSearch.toLowerCase()
@@ -48,9 +130,9 @@ export default function Expenses() {
     )
   })
 
-  const panelTotal = selectedHead
-    ? Number(selectedHead.payment) || 0
-    : allExpenses.reduce((s, e) => s + (Number(e.payment) || 0), 0)
+  const panelTotal = selectedHeadId
+    ? headTotals[String(selectedHeadId)] || 0
+    : dateFilteredExpenses.reduce((s, e) => s + (Number(e.payment) || 0), 0)
 
   return (
     <div className="expenses-page">
@@ -90,7 +172,9 @@ export default function Expenses() {
               >
                 <span className="exp-cat-name">{head.name}</span>
                 <span className="exp-cat-amount">
-                  {Math.round(Number(head.payment) || 0).toLocaleString('en-IN')}
+                  {Math.round(
+                    headTotals[String(head.exhid ?? head.id)] ?? (Number(head.payment) || 0)
+                  ).toLocaleString('en-IN')}
                 </span>
               </button>
             ))}
@@ -120,15 +204,54 @@ export default function Expenses() {
           </div>
 
           <div className="exp-right-toolbar">
-            <div className="exp-search-box">
-              <Search size={16} className="exp-search-icon" />
-              <input
-                type="search"
-                placeholder="Search..."
-                value={rightSearch}
-                onChange={(e) => setRightSearch(e.target.value)}
-                className="exp-search-input"
-              />
+            <div className="exp-right-toolbar-row">
+              <div className="exp-date-filters">
+                <select
+                  className="exp-select"
+                  value={datePreset}
+                  onChange={(e) => setDatePreset(e.target.value)}
+                  aria-label="Date range preset"
+                >
+                  <option value="current-month">Current month</option>
+                  <option value="last-month">Last month</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
+                  <option value="all">All</option>
+                  <option value="custom">Custom</option>
+                </select>
+                <input
+                  type="date"
+                  className="exp-date"
+                  value={from}
+                  onChange={(e) => {
+                    setFrom(e.target.value)
+                    setDatePreset('custom')
+                  }}
+                  aria-label="From date"
+                />
+                <input
+                  type="date"
+                  className="exp-date"
+                  value={to}
+                  onChange={(e) => {
+                    setTo(e.target.value)
+                    setDatePreset('custom')
+                  }}
+                  aria-label="To date"
+                />
+              </div>
+
+              <div className="exp-search-box">
+                <Search size={16} className="exp-search-icon" />
+                <input
+                  type="search"
+                  placeholder="Search..."
+                  value={rightSearch}
+                  onChange={(e) => setRightSearch(e.target.value)}
+                  className="exp-search-input"
+                />
+              </div>
             </div>
           </div>
 
