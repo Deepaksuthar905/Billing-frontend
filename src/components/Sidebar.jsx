@@ -27,7 +27,12 @@ const navItems = [
     ],
   },
   { to: '/purchase', icon: Package, label: 'Purchase' },
-  { to: '/expenses', icon: Receipt, label: 'Expenses' },
+  {
+    to: '/expenses',
+    icon: Receipt,
+    label: 'Expenses',
+    children: [{ to: '/expenses/general-entry', label: 'Journal Entry' }],
+  },
   { to: '/inventory', icon: Boxes, label: 'Inventory' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
@@ -38,10 +43,16 @@ export default function Sidebar({ isOpen, onClose, isMobile }) {
   const location = useLocation()
   const isInvoicesRoute = useMemo(() => location.pathname.startsWith('/invoices'), [location.pathname])
   const [invoicesOpen, setInvoicesOpen] = useState(false)
+  const isExpensesRoute = useMemo(() => location.pathname.startsWith('/expenses'), [location.pathname])
+  const [expensesOpen, setExpensesOpen] = useState(false)
 
   useEffect(() => {
     if (isInvoicesRoute) setInvoicesOpen(true)
   }, [isInvoicesRoute])
+
+  useEffect(() => {
+    if (isExpensesRoute) setExpensesOpen(true)
+  }, [isExpensesRoute])
 
   function handleLogout() {
     clearAuthToken()
@@ -83,9 +94,14 @@ export default function Sidebar({ isOpen, onClose, isMobile }) {
             )
           }
 
+          const isGroupActive = to === '/invoices' ? isInvoicesRoute : to === '/expenses' ? isExpensesRoute : false
+          const isOpen = to === '/invoices' ? invoicesOpen : to === '/expenses' ? expensesOpen : false
+          const toggleOpen = to === '/invoices' ? setInvoicesOpen : setExpensesOpen
+          const ariaLabel = to === '/invoices' ? 'Toggle invoice submenu' : 'Toggle expenses submenu'
+
           return (
             <div key={to} className="nav-group">
-              <div className={`nav-group-row ${isInvoicesRoute ? 'nav-item-active' : ''}`}>
+              <div className={`nav-group-row ${isGroupActive ? 'nav-item-active' : ''}`}>
                 <NavLink
                   to={to}
                   onClick={onClose}
@@ -99,18 +115,18 @@ export default function Sidebar({ isOpen, onClose, isMobile }) {
                 <button
                   type="button"
                   className="nav-item-caret-btn"
-                  aria-label="Toggle invoice submenu"
+                  aria-label={ariaLabel}
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    setInvoicesOpen((o) => !o)
+                    toggleOpen((o) => !o)
                   }}
                 >
-                  <ChevronDown size={16} className={`nav-item-caret ${invoicesOpen ? 'open' : ''}`} />
+                  <ChevronDown size={16} className={`nav-item-caret ${isOpen ? 'open' : ''}`} />
                 </button>
               </div>
 
-              {invoicesOpen && (
+              {isOpen && (
                 <div className="nav-sub">
                   {children.map((c) => (
                     <NavLink
