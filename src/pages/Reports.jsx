@@ -1,17 +1,15 @@
-import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, FileText, Calendar, Download, Share2, Printer, FileJson } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BarChart3, FileText, Calendar, Download, Share2, Printer } from 'lucide-react'
 import {
-  API_BASE_URL,
   useGetGstRateReportQuery,
   useGetInvoicesQuery,
   useGetPurchaseOrdersQuery,
   useGetLedgerQuery,
   useGetExpenseReportQuery,
   useGetPayByListQuery,
-  useGetCustomersQuery,
 } from '../store/api'
 import { getAuthToken } from '../lib/authToken'
-import { exportCurrentReport, downloadExcelWorkbook } from '../utils/reportExcelExport'
+import { exportCurrentReport } from '../utils/reportExcelExport'
 import { aggregateHsnRows, downloadJson } from '../utils/gstr1JsonExport'
 import { buildDocumentIssuedSummary } from '../utils/documentIssuedSummary'
 import {
@@ -40,7 +38,13 @@ function mapInvoiceToGstr1Row(inv) {
   const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
   const taxableValue = invoiceValue - totalTax
   const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
-  const taxRate = safeTaxableValue > 0 ? (totalTax / safeTaxableValue) * 100 : 0
+  const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
+  const taxRate =
+    gstPercent != null && !Number.isNaN(gstPercent)
+      ? gstPercent
+      : safeTaxableValue > 0
+        ? (totalTax / safeTaxableValue) * 100
+        : 0
   return {
     gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
     partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
@@ -171,15 +175,63 @@ const reportCategories = [
 
 const gstSubOptions = [
   { id: 'gstr1', title: 'GSTR-1' },
-  { id: 'b2b', title: 'B2B' },
-  { id: 'b2c', title: 'B2C' },
-  { id: 'b2b-hsn', title: 'B2B HSN' },
-  { id: 'b2c-hsn', title: 'B2C HSN' },
-  { id: 'doc-summary', title: 'Documents issued' },
   { id: 'gstr3b', title: 'GSTR-3B' },
   { id: 'purchase-reg', title: 'Purchase register' },
   { id: 'gst-rate', title: 'GST Rate Report' },
 ]
+
+/** GST % from purchase API — Tax rate column shows this only (no derived % when present). */
+function pickPurchaseGstPercent(po) {
+  const keys = ['gst', 'gst_rate', 'gst_percent', 'gstper', 'gstpct', 'tax_rate', 'taxRate']
+  for (const k of keys) {
+    const v = po[k]
+    if (v != null && v !== '') {
+      const n = Number(v)
+      if (!Number.isNaN(n)) return n
+    }
+  }
+  return null
+}
+
+/** Purchase bills → same column logic as sales (Value, taxes, POS) */
+function buildPurchaseRegisterRows(purchases) {
+  return purchases.map((po) => {
+    const cgst = Number(po.cgst) || 0
+    const sgst = Number(po.sgst) || 0
+    const igst = Number(po.igst) || 0
+    const totalTax = cgst + sgst + igst
+    const billValue = Number(po.amount) || Number(po.total) || Number(po.payment) || 0
+    const taxableFromApi = Number(po.taxable_amt)
+    const taxableComputed = billValue - totalTax
+    const safeTaxable =
+      !Number.isNaN(taxableFromApi) && taxableFromApi > 0
+        ? taxableFromApi
+        : taxableComputed > 0
+          ? taxableComputed
+          : billValue
+    const gstFromApi = pickPurchaseGstPercent(po)
+    /** Pehle response ka `gst` (ya alias); na ho to taxable se derive */
+    const taxRate =
+      gstFromApi != null
+        ? gstFromApi
+        : safeTaxable > 0
+          ? (totalTax / safeTaxable) * 100
+          : 0
+    return {
+      gstin: po.vendor_gstin ?? po.gstin ?? po.gst_no ?? po.gstin_no,
+      partyName: po.vendor ?? po.vendor_name ?? po.partyname ?? po.billing_name,
+      invNo: po.inv_no ?? po.po_no ?? po.bill_no ?? po.id,
+      date: po.dt ?? po.date,
+      value: billValue,
+      taxRate,
+      taxableValue: safeTaxable,
+      integratedTaxDisplay: sgst,
+      centralTaxDisplay: igst,
+      stateTaxDisplay: cgst,
+      placeOfSupply: po.state ?? po.place_of_supply ?? po.state_name ?? po.pos,
+    }
+  })
+}
 
 /** Invoice line → outward supply totals (same basis as GSTR-1 table) */
 function summarizeOutwardSupplies(invoices) {
@@ -205,6 +257,29 @@ function summarizeOutwardSupplies(invoices) {
   return { taxable, igst, cgst, sgst, invoiceValue, totalTax: igst + cgst + sgst }
 }
 
+/** Purchase bills → ITC-style totals (when API sends cgst/sgst/igst) */
+function summarizePurchaseItc(purchases) {
+  let taxable = 0
+  let igst = 0
+  let cgst = 0
+  let sgst = 0
+  let gross = 0
+  for (const po of purchases) {
+    const c = Number(po.cgst) || 0
+    const s = Number(po.sgst) || 0
+    const i = Number(po.igst) || 0
+    const totalTax = c + s + i
+    const val = Number(po.amount) || Number(po.total) || Number(po.payment) || 0
+    const tv = val - totalTax
+    const safeTaxable = tv > 0 ? tv : val
+    taxable += safeTaxable
+    igst += i
+    cgst += c
+    sgst += s
+    gross += val
+  }
+  return { taxable, igst, cgst, sgst, gross, totalTax: igst + cgst + sgst }
+}
 export default function Reports() {
   const [dateRange, setDateRange] = useState('current-month')
   const [activeReportId, setActiveReportId] = useState('purchase')
@@ -227,8 +302,6 @@ export default function Reports() {
   const [ledgerPayById, setLedgerPayById] = useState('')
   /** Set on Apply only — changing dropdown does not refetch */
   const [ledgerAppliedPbid, setLedgerAppliedPbid] = useState(undefined)
-  const [isExportingPortalJson, setIsExportingPortalJson] = useState(false)
-  const [isExportingFullGstr1Json, setIsExportingFullGstr1Json] = useState(false)
 
   const handleHeaderDateRangeChange = (preset) => {
     setDateRange(preset)
@@ -245,7 +318,7 @@ export default function Reports() {
       setLedgerFrom(r.from)
       setLedgerTo(r.to)
     } else if (activeReportId === 'gst') {
-      if (GST_SUBS_WITH_INVOICES.includes(activeGstSub)) {
+      if (activeGstSub === 'gstr1') {
         setGstr1From(r.from)
         setGstr1To(r.to)
       } else if (activeGstSub === 'gstr3b') {
@@ -282,32 +355,10 @@ export default function Reports() {
   const ledgerPbidForApi =
     ledgerAppliedPbid != null && ledgerAppliedPbid !== '' ? ledgerAppliedPbid : undefined
 
-  const { data: invoicesData, isLoading: gstInvoicesLoading } = useGetInvoicesQuery(
+  const { data: invoicesData, isLoading: gstr1Loading } = useGetInvoicesQuery(
     { from: gstr1From, to: gstr1To },
-    { skip: !(activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub)) }
+    { skip: !(activeReportId === 'gst' && activeGstSub === 'gstr1') }
   )
-
-  const { data: customersData, isLoading: customersForB2Loading } = useGetCustomersQuery(undefined, {
-    skip: !(activeReportId === 'gst' && GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub)),
-  })
-
-  const { data: vendorData } = useGetCustomersQuery(
-    { prtytyp: 1 },
-    { skip: !(activeReportId === 'gst' && activeGstSub === 'purchase-reg') }
-  )
-  const vendorPartyByPid = useMemo(
-    () => buildPartyMapByPid(vendorData?.data ?? []),
-    [vendorData?.data]
-  )
-
-  const partyByPid = useMemo(
-    () => buildPartyMapByPid(customersData?.data ?? []),
-    [customersData?.data]
-  )
-
-  const gstB2SplitLoading =
-    gstInvoicesLoading ||
-    (GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) && customersForB2Loading)
 
   const { data: gstr3bInvoicesData, isLoading: gstr3bInvoicesLoading } = useGetInvoicesQuery(
     { from: gstr3bFrom, to: gstr3bTo },
@@ -333,33 +384,40 @@ export default function Reports() {
         return d >= fromDt && d <= toDt
       })
     : invoices
-  const gstr1Rows = filteredInvoices.map(mapInvoiceToGstr1Row)
-
-  const b2bInvoices = filteredInvoices.filter((inv) => invoiceIsB2BByParty(inv, partyByPid))
-  const b2cInvoices = filteredInvoices.filter((inv) => !invoiceIsB2BByParty(inv, partyByPid))
-  const b2bRows = b2bInvoices.map(mapInvoiceToGstr1Row)
-  const b2cRows = b2cInvoices.map(mapInvoiceToGstr1Row)
-  const b2bHsnRows = aggregateHsnRows(b2bInvoices)
-  const b2cHsnRows = aggregateHsnRows(b2cInvoices)
-  const b2bHsnTotals = b2bHsnRows.reduce(
-    (s, r) => ({
-      txval: s.txval + (Number(r.txval) || 0),
-      iamt: s.iamt + (Number(r.iamt) || 0),
-      camt: s.camt + (Number(r.camt) || 0),
-      samt: s.samt + (Number(r.samt) || 0),
-    }),
-    { txval: 0, iamt: 0, camt: 0, samt: 0 }
-  )
-  const b2cHsnTotals = b2cHsnRows.reduce(
-    (s, r) => ({
-      txval: s.txval + (Number(r.txval) || 0),
-      iamt: s.iamt + (Number(r.iamt) || 0),
-      camt: s.camt + (Number(r.camt) || 0),
-      samt: s.samt + (Number(r.samt) || 0),
-    }),
-    { txval: 0, iamt: 0, camt: 0, samt: 0 }
-  )
-  const documentIssuedSummary = buildDocumentIssuedSummary(filteredInvoices)
+  const gstr1Rows = filteredInvoices.map((inv) => {
+    const cgst = Number(inv.cgst) || 0
+    const sgst = Number(inv.sgst) || 0
+    const igst = Number(inv.igst) || 0
+    const totalTax = cgst + sgst + igst
+    /** API `amount` = invoice value column; fallback `payment` for older payloads */
+    const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
+    const taxableValue = invoiceValue - totalTax
+    const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
+    const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
+    const taxRate =
+      gstPercent != null && !Number.isNaN(gstPercent)
+        ? gstPercent
+        : safeTaxableValue > 0
+          ? (totalTax / safeTaxableValue) * 100
+          : 0
+    return {
+      gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
+      partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
+      invNo: inv.inv_no ?? inv.id,
+      date: inv.dt ?? inv.date,
+      value: invoiceValue,
+      taxRate,
+      taxableValue: safeTaxableValue,
+      cgst,
+      sgst,
+      igst,
+      /** Table columns: Integrated → SGST, Central → IGST, State → CGST (per report layout) */
+      integratedTaxDisplay: igst,
+      centralTaxDisplay: cgst,
+      stateTaxDisplay: sgst,
+      placeOfSupply: inv.state ?? inv.place_of_supply ?? inv.state_name ?? inv.pos,
+    }
+  })
   const gstr1HsnSummary = gstr1Rows.length
     ? {
         totalTaxable: gstr1Rows.reduce((s, r) => s + (r.taxableValue || 0), 0),
@@ -390,7 +448,7 @@ export default function Reports() {
       : gstr3bPurchasesRaw
 
   const outward3b = summarizeOutwardSupplies(gstr3bInvoicesFiltered)
-  const itc3b = summarizePurchaseItcTotals(gstr3bPurchasesFiltered)
+  const itc3b = summarizePurchaseItc(gstr3bPurchasesFiltered)
   const net3b = {
     igst: outward3b.igst - itc3b.igst,
     cgst: outward3b.cgst - itc3b.cgst,
@@ -406,13 +464,13 @@ export default function Reports() {
           return d != null && d >= purchaseRegFrom && d <= purchaseRegTo
         })
       : purchaseRegRaw
-  const purchaseRegRows = buildPurchaseRegisterRows(purchaseRegFiltered, vendorPartyByPid)
+  const purchaseRegRows = buildPurchaseRegisterRows(purchaseRegFiltered)
   const purchaseRegTotals = purchaseRegRows.length
     ? {
         taxable: purchaseRegRows.reduce((s, r) => s + (r.taxableValue || 0), 0),
-        igst: purchaseRegRows.reduce((s, r) => s + (r.igst || 0), 0),
-        cgst: purchaseRegRows.reduce((s, r) => s + (r.cgst || 0), 0),
-        sgst: purchaseRegRows.reduce((s, r) => s + (r.sgst || 0), 0),
+        igst: purchaseRegRows.reduce((s, r) => s + (r.centralTaxDisplay || 0), 0),
+        cgst: purchaseRegRows.reduce((s, r) => s + (r.stateTaxDisplay || 0), 0),
+        sgst: purchaseRegRows.reduce((s, r) => s + (r.integratedTaxDisplay || 0), 0),
         value: purchaseRegRows.reduce((s, r) => s + (r.value || 0), 0),
       }
     : null
@@ -606,85 +664,6 @@ export default function Reports() {
     }
   }
 
-  const handleExportB2cStateSummary = () => {
-    if (gstInvoicesLoading || customersForB2Loading) {
-      alert('Data is still loading. Please wait a moment and try again.')
-      return
-    }
-    if (!b2cRows.length) {
-      alert('No B2C data to export.')
-      return
-    }
-
-    // Group by Place of Supply
-    const stateMap = new Map()
-    for (const row of b2cRows) {
-      const state = String(row.placeOfSupply ?? '—').trim() || '—'
-      const prev = stateMap.get(state) ?? {
-        state,
-        taxable: 0,
-        igst: 0,
-        cgst: 0,
-        sgst: 0,
-        totalTax: 0,
-        totalValue: 0,
-      }
-      prev.taxable += Number(row.taxableValue) || 0
-      prev.igst += Number(row.integratedTaxDisplay) || 0
-      prev.cgst += Number(row.centralTaxDisplay) || 0
-      prev.sgst += Number(row.stateTaxDisplay) || 0
-      prev.totalTax += (Number(row.integratedTaxDisplay) || 0) + (Number(row.centralTaxDisplay) || 0) + (Number(row.stateTaxDisplay) || 0)
-      prev.totalValue += Number(row.value) || 0
-      stateMap.set(state, prev)
-    }
-
-    const stateRows = [...stateMap.values()].sort((a, b) =>
-      a.state.localeCompare(b.state, 'en-IN')
-    )
-
-    const r2 = (n) => Math.round(n * 100) / 100
-
-    const totals = stateRows.reduce(
-      (s, r) => ({
-        taxable: s.taxable + r.taxable,
-        igst: s.igst + r.igst,
-        cgst: s.cgst + r.cgst,
-        sgst: s.sgst + r.sgst,
-        totalTax: s.totalTax + r.totalTax,
-        totalValue: s.totalValue + r.totalValue,
-      }),
-      { taxable: 0, igst: 0, cgst: 0, sgst: 0, totalTax: 0, totalValue: 0 }
-    )
-
-    downloadExcelWorkbook(
-      [
-        {
-          name: 'B2C State Summary',
-          rows: [
-            ['B2C – State-wise Summary'],
-            ['Period', `${gstr1From ?? ''} to ${gstr1To ?? ''}`],
-            ['Total States', stateRows.length],
-            [],
-            ['Sno.', 'Place of Supply', 'Taxable Value', 'IGST', 'CGST', 'SGST', 'Total Tax', 'Invoice Value'],
-            ...stateRows.map((r, i) => [
-              i + 1,
-              r.state,
-              r2(r.taxable),
-              r2(r.igst),
-              r2(r.cgst),
-              r2(r.sgst),
-              r2(r.totalTax),
-              r2(r.totalValue),
-            ]),
-            [],
-            ['Total', '', r2(totals.taxable), r2(totals.igst), r2(totals.cgst), r2(totals.sgst), r2(totals.totalTax), r2(totals.totalValue)],
-          ],
-        },
-      ],
-      `B2C_State_Summary_${gstr1From ?? ''}_${gstr1To ?? ''}.xlsx`
-    )
-  }
-
   const handleExportExcel = () => {
     if (
       activeReportId === 'gst' &&
@@ -701,15 +680,6 @@ export default function Reports() {
       gstr1To,
       gstr1Rows,
       gstr1HsnSummary,
-      b2bFrom: gstr1From,
-      b2bTo: gstr1To,
-      b2bRows,
-      b2cRows,
-      b2bHsnRows,
-      b2cHsnRows,
-      docSummaryFrom: gstr1From,
-      docSummaryTo: gstr1To,
-      documentIssuedSummary,
       gstr3bFrom,
       gstr3bTo,
       outward3b,
@@ -783,34 +753,6 @@ export default function Reports() {
               ? 'Loading…'
               : 'Export'}
           </button>
-          {activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub) && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleExportCombinedGstr1Json}
-              disabled={
-                isExportingFullGstr1Json || isExportingPortalJson || gstInvoicesLoading
-              }
-              title="Single file: b2b + b2cs + hsn (B2B & B2C) + doc_issue — same combined shape as GSTR-1 offline utility"
-            >
-              <FileJson size={18} />
-              {isExportingFullGstr1Json ? 'Building…' : 'Full GSTR-1 JSON'}
-            </button>
-          )}
-          {activeReportId === 'gst' && GST_SUBS_PORTAL_JSON.includes(activeGstSub) && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleExportGstPortalJson}
-              disabled={
-                isExportingPortalJson || isExportingFullGstr1Json || gstInvoicesLoading
-              }
-              title="Current tab only — slice JSON for GST offline tool"
-            >
-              <FileJson size={18} />
-              {isExportingPortalJson ? 'Exporting…' : 'Tab JSON'}
-            </button>
-          )}
         </div>
       </div>
 
@@ -1020,7 +962,7 @@ export default function Reports() {
                 </div>
               </div>
               <h2 className="gst-rate-title">GSTR-1 – Outward Supplies</h2>
-              {gstInvoicesLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {gstr1Loading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
                 <table className="gst-rate-table">
                   <thead>
@@ -1048,7 +990,7 @@ export default function Reports() {
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
                         <td className="text-right">{formatReportAmount(row.value)}</td>
-                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">18%</td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
                         <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
                         <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
@@ -1194,16 +1136,6 @@ export default function Reports() {
                     />
                   </label>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={handleExportB2cStateSummary}
-                  disabled={gstInvoicesLoading || customersForB2Loading}
-                  title="State-wise summary: total taxable, IGST, CGST, SGST per state"
-                >
-                  <Download size={16} />
-                  State Excel
-                </button>
               </div>
               <h2 className="gst-rate-title">B2C – Unregistered / retail outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
@@ -1651,27 +1583,27 @@ export default function Reports() {
                   </label>
                 </div>
               </div>
-              <h2 className="gst-rate-title">Purchase register – Inward supplies (GSTR-2B / ITC)</h2>
-              <p className="report-placeholder text-muted gstr3b-note" style={{ marginBottom: '0.75rem' }}>
-                GSTR-2B style: IGST = integrated tax, CGST = central tax, SGST = state tax. Tax rate is GST % (not tax
-                amount). Intra-state bills split tax into CGST + SGST; inter-state into IGST.
-              </p>
+              <h2 className="gst-rate-title">Purchase register – Inward supplies (ITC)</h2>
+              {/* <p className="report-placeholder text-muted gstr3b-note">
+                GSTR-2B reconciliation ke liye vendor GSTIN, bill value aur tax break-up saath rakhna chahiye. Column mapping sales (GSTR-1) jaisi hai:
+                Integrated = SGST, Central = IGST, State = CGST.
+              </p> */}
               {purchaseRegLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
-                <table className="gst-rate-table purchase-reg-gstr2b-table">
+                <table className="gst-rate-table">
                   <thead>
                     <tr>
                       <th>Sno.</th>
-                      <th>GSTIN of supplier</th>
-                      <th>Trade / legal name</th>
-                      <th>Invoice no.</th>
-                      <th>Invoice date</th>
-                      <th className="text-right">Invoice value</th>
-                      <th className="text-right">Rate (%)</th>
+                      <th>Vendor GSTIN</th>
+                      <th>Vendor / Party</th>
+                      <th>Bill no.</th>
+                      <th>Date</th>
+                      <th className="text-right">Value</th>
+                      <th className="text-right">Tax rate</th>
                       <th className="text-right">Taxable value</th>
-                      <th className="text-right">Integrated tax (IGST)</th>
-                      <th className="text-right">Central tax (CGST)</th>
-                      <th className="text-right">State / UT tax (SGST)</th>
+                      <th className="text-right">Integrated tax</th>
+                      <th className="text-right">Central tax</th>
+                      <th className="text-right">State tax</th>
                       <th>Place of supply</th>
                     </tr>
                   </thead>
@@ -1679,19 +1611,17 @@ export default function Reports() {
                     {purchaseRegRows.map((row, i) => (
                       <tr key={i}>
                         <td>{i + 1}</td>
-                        <td>{formatRegisterGstin(row.gstin)}</td>
+                        <td>{getDisplayValue(row.gstin)}</td>
                         <td>{getDisplayValue(row.partyName)}</td>
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
                         <td className="text-right">{formatReportAmount(row.value)}</td>
-                        <td className="text-right">
-                          {row.taxRate > 0 ? `${Number(row.taxRate).toFixed(0)}%` : '—'}
-                        </td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
                         <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
-                        <td className="text-right">{formatReportAmount(row.igst)}</td>
-                        <td className="text-right">{formatReportAmount(row.cgst)}</td>
-                        <td className="text-right">{formatReportAmount(row.sgst)}</td>
-                        <td>{row.placeOfSupply || '—'}</td>
+                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
+                        <td>{getDisplayValue(row.placeOfSupply)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1709,13 +1639,13 @@ export default function Reports() {
                           <strong>{formatReportAmount(purchaseRegTotals.taxable)}</strong>
                         </td>
                         <td className="text-right">
+                          <strong>{formatReportAmount(purchaseRegTotals.sgst)}</strong>
+                        </td>
+                        <td className="text-right">
                           <strong>{formatReportAmount(purchaseRegTotals.igst)}</strong>
                         </td>
                         <td className="text-right">
                           <strong>{formatReportAmount(purchaseRegTotals.cgst)}</strong>
-                        </td>
-                        <td className="text-right">
-                          <strong>{formatReportAmount(purchaseRegTotals.sgst)}</strong>
                         </td>
                         <td />
                       </tr>
