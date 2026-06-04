@@ -10,8 +10,11 @@ import Customers from './pages/Customers'
 import Reports from './pages/Reports'
 import Invoices from './pages/Invoices'
 import InvoiceNew from './pages/InvoiceNew'
+import InvoiceDueList from './pages/InvoiceDueList'
+import InvoicePayInList from './pages/InvoicePayInList'
 import Expenses from './pages/Expenses'
 import ExpenseNew from './pages/ExpenseNew'
+import ExpenseGeneralEntry from './pages/ExpenseGeneralEntry'
 
 function App() {
   return (
@@ -32,9 +35,12 @@ function App() {
         <Route path="inventory" element={<Inventory />} />
         <Route path="customers" element={<Customers />} />
         <Route path="invoices" element={<Invoices />} />
+        <Route path="invoices/due" element={<InvoiceDueList />} />
+        <Route path="invoices/pay-in" element={<InvoicePayInList />} />
         <Route path="invoices/new" element={<InvoiceNew />} />
         <Route path="invoices/:id/edit" element={<InvoiceNew />} />
         <Route path="expenses" element={<Expenses />} />
+        <Route path="expenses/general-entry" element={<ExpenseGeneralEntry />} />
         <Route path="expenses/new" element={<ExpenseNew />} />
         <Route path="reports" element={<Reports />} />
       </Route>

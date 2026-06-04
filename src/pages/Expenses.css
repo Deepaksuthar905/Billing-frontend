@@ -187,6 +187,39 @@
   border-bottom: 1px solid var(--border, #e5e7eb);
 }
 
+.exp-right-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.exp-date-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exp-select,
+.exp-date {
+  height: 34px;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 6px);
+  font-size: 0.85rem;
+  background: var(--bg-surface, #f9fafb);
+  color: var(--text, #1f2937);
+  outline: none;
+}
+
+.exp-select:focus,
+.exp-date:focus {
+  border-color: var(--primary, #4f46e5);
+  background: #fff;
+}
+
 .exp-right-toolbar .exp-search-box {
   max-width: 280px;
 }

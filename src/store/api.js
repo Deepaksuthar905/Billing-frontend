@@ -69,7 +69,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger', 'GeneralEntry'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     login: builder.mutation({
@@ -309,6 +309,35 @@ export const billingApi = createApi({
           ? [...result.data.map(({ id }) => ({ type: 'Expense', id })), 'Expense']
           : ['Expense'],
     }),
+
+    // Pay-in list
+    getPayInList: builder.query({
+      query: () => ({ url: '/pay-in' }),
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map((r) => ({ type: 'PayIn', id: r.pinid ?? r.id })), 'PayIn']
+          : ['PayIn'],
+    }),
+    deletePayIn: builder.mutation({
+      query: (pinid) => ({ url: `/delpay-in/${pinid}`, method: 'POST' }),
+      invalidatesTags: ['PayIn'],
+    }),
+
+    // General entry (journal)
+    getGeneralEntryList: builder.query({
+      query: () => ({ url: '/general-entry' }),
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map((r) => ({ type: 'GeneralEntry', id: r.id ?? r.geid ?? r.jid })), 'GeneralEntry']
+          : ['GeneralEntry'],
+    }),
+    createGeneralEntry: builder.mutation({
+      query: (body) => ({ url: '/general-entry', method: 'POST', body }),
+      invalidatesTags: ['GeneralEntry', 'Ledger'],
+    }),
+
     getExpenseById: builder.query({
       query: (exid) => ({ url: `/expenses/${exid}` }),
       transformResponse: (r) => {
@@ -358,6 +387,10 @@ export const {
   useUpdateItemMutation,
   useGetLedgerQuery,
   useGetExpenseHeadsQuery,
+  useGetPayInListQuery,
+  useDeletePayInMutation,
+  useGetGeneralEntryListQuery,
+  useCreateGeneralEntryMutation,
   useCreateExpenseHeadMutation,
   useGetExpensesQuery,
   useGetExpenseByIdQuery,

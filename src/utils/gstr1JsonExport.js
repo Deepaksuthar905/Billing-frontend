@@ -162,7 +162,11 @@ export function buildGstr1InvoiceEntry(inv, sellerGstin) {
 
   const pos = getGstr1PlaceOfSupply(inv, sellerGstin)
   const items = normalizeItems(inv)
-  const rtDefault = Number(inv.gst) || 18
+  const rtDefault = (() => {
+    const t = cgst + sgst + igst
+    const tv = safeHeaderTaxable > 0 ? safeHeaderTaxable : 1
+    return t > 0 ? Math.round((t / tv) * 100) : 18
+  })()
 
   let itms
   if (items.length === 0) {
@@ -224,14 +228,14 @@ export function aggregateHsnRows(fullInvoices) {
     const sgst = Number(inv.sgst) || 0
     const igst = Number(inv.igst) || 0
     const items = normalizeItems(inv)
-    const rtFallback = Number(inv.gst) || 18
 
     if (items.length === 0) {
       const hsn_sc = String(inv.hsn ?? inv.hsn_code ?? '998319').replace(/\D/g, '').slice(0, 8) || '998319'
       const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
       const totalTax = cgst + sgst + igst
       const txval = round2(invoiceValue - totalTax > 0 ? invoiceValue - totalTax : invoiceValue)
-      const key = `${hsn_sc}|${rtFallback}|NOS`
+      const rtCalc = txval > 0 ? Math.round((totalTax / txval) * 100) : 18
+      const key = `${hsn_sc}|${rtCalc}|NOS`
       const prev = hsnAgg.get(key) || {
         num: 0,
         hsn_sc,
@@ -244,7 +248,7 @@ export function aggregateHsnRows(fullInvoices) {
         user_desc: '',
         uqc: 'NOS',
         qty: 0,
-        rt: rtFallback,
+        rt: rtCalc,
       }
       prev.txval = round2(prev.txval + txval)
       prev.iamt = round2(prev.iamt + igst)
@@ -262,7 +266,8 @@ export function aggregateHsnRows(fullInvoices) {
       const gross = Number(line.amount ?? line.total ?? 0)
       const lineTax = Number(line.tax_amt ?? line.gst_amt ?? line.taxAmt ?? 0)
       const txval = round2(gross - lineTax > 0 ? gross - lineTax : gross)
-      const rt = Number(line.tax_pct ?? line.gst_pct ?? line.gst ?? rtFallback) || rtFallback
+      const rtRaw = Number(line.tax_pct ?? line.gst_pct ?? 0) || (txval > 0 ? Math.round((lineTax / txval) * 100) : 18)
+      const rt = Math.round(rtRaw)
       const qty = Number(line.qty ?? line.quantity ?? 1) || 1
       const uqc = unitToUqc(line.unit ?? line.uqc ?? line.uom)
       const key = `${hsn_sc}|${rt}|${uqc}`

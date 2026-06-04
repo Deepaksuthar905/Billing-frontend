@@ -11,7 +11,7 @@ import {
   useGetCustomersQuery,
 } from '../store/api'
 import { getAuthToken } from '../lib/authToken'
-import { exportCurrentReport } from '../utils/reportExcelExport'
+import { exportCurrentReport, downloadExcelWorkbook } from '../utils/reportExcelExport'
 import { aggregateHsnRows, downloadJson } from '../utils/gstr1JsonExport'
 import { buildDocumentIssuedSummary } from '../utils/documentIssuedSummary'
 import {
@@ -40,13 +40,7 @@ function mapInvoiceToGstr1Row(inv) {
   const invoiceValue = Number(inv.amount) || Number(inv.payment) || 0
   const taxableValue = invoiceValue - totalTax
   const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
-  const gstPercent = inv.gst != null && inv.gst !== '' ? Number(inv.gst) : null
-  const taxRate =
-    gstPercent != null && !Number.isNaN(gstPercent)
-      ? gstPercent
-      : safeTaxableValue > 0
-        ? (totalTax / safeTaxableValue) * 100
-        : 0
+  const taxRate = safeTaxableValue > 0 ? (totalTax / safeTaxableValue) * 100 : 0
   return {
     gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
     partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
@@ -612,7 +606,94 @@ export default function Reports() {
     }
   }
 
+  const handleExportB2cStateSummary = () => {
+    if (gstInvoicesLoading || customersForB2Loading) {
+      alert('Data is still loading. Please wait a moment and try again.')
+      return
+    }
+    if (!b2cRows.length) {
+      alert('No B2C data to export.')
+      return
+    }
+
+    // Group by Place of Supply
+    const stateMap = new Map()
+    for (const row of b2cRows) {
+      const state = String(row.placeOfSupply ?? '—').trim() || '—'
+      const prev = stateMap.get(state) ?? {
+        state,
+        taxable: 0,
+        igst: 0,
+        cgst: 0,
+        sgst: 0,
+        totalTax: 0,
+        totalValue: 0,
+      }
+      prev.taxable += Number(row.taxableValue) || 0
+      prev.igst += Number(row.integratedTaxDisplay) || 0
+      prev.cgst += Number(row.centralTaxDisplay) || 0
+      prev.sgst += Number(row.stateTaxDisplay) || 0
+      prev.totalTax += (Number(row.integratedTaxDisplay) || 0) + (Number(row.centralTaxDisplay) || 0) + (Number(row.stateTaxDisplay) || 0)
+      prev.totalValue += Number(row.value) || 0
+      stateMap.set(state, prev)
+    }
+
+    const stateRows = [...stateMap.values()].sort((a, b) =>
+      a.state.localeCompare(b.state, 'en-IN')
+    )
+
+    const r2 = (n) => Math.round(n * 100) / 100
+
+    const totals = stateRows.reduce(
+      (s, r) => ({
+        taxable: s.taxable + r.taxable,
+        igst: s.igst + r.igst,
+        cgst: s.cgst + r.cgst,
+        sgst: s.sgst + r.sgst,
+        totalTax: s.totalTax + r.totalTax,
+        totalValue: s.totalValue + r.totalValue,
+      }),
+      { taxable: 0, igst: 0, cgst: 0, sgst: 0, totalTax: 0, totalValue: 0 }
+    )
+
+    downloadExcelWorkbook(
+      [
+        {
+          name: 'B2C State Summary',
+          rows: [
+            ['B2C – State-wise Summary'],
+            ['Period', `${gstr1From ?? ''} to ${gstr1To ?? ''}`],
+            ['Total States', stateRows.length],
+            [],
+            ['Sno.', 'Place of Supply', 'Taxable Value', 'IGST', 'CGST', 'SGST', 'Total Tax', 'Invoice Value'],
+            ...stateRows.map((r, i) => [
+              i + 1,
+              r.state,
+              r2(r.taxable),
+              r2(r.igst),
+              r2(r.cgst),
+              r2(r.sgst),
+              r2(r.totalTax),
+              r2(r.totalValue),
+            ]),
+            [],
+            ['Total', '', r2(totals.taxable), r2(totals.igst), r2(totals.cgst), r2(totals.sgst), r2(totals.totalTax), r2(totals.totalValue)],
+          ],
+        },
+      ],
+      `B2C_State_Summary_${gstr1From ?? ''}_${gstr1To ?? ''}.xlsx`
+    )
+  }
+
   const handleExportExcel = () => {
+    if (
+      activeReportId === 'gst' &&
+      GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+      (gstInvoicesLoading || customersForB2Loading)
+    ) {
+      alert('Party data is still loading. Please wait a moment and try again.')
+      return
+    }
     exportCurrentReport({
       activeReportId,
       activeGstSub,
@@ -678,9 +759,29 @@ export default function Reports() {
               <option value="custom">Custom range</option>
             </select>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={handleExportExcel} title="Download Excel (.xlsx)">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportExcel}
+            disabled={
+              activeReportId === 'gst' &&
+              GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+              (gstInvoicesLoading || customersForB2Loading)
+            }
+            title={
+              activeReportId === 'gst' &&
+              GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+              (gstInvoicesLoading || customersForB2Loading)
+                ? 'Loading party data, please wait…'
+                : 'Download Excel (.xlsx)'
+            }
+          >
             <Download size={18} />
-            Export
+            {activeReportId === 'gst' &&
+            GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+            (gstInvoicesLoading || customersForB2Loading)
+              ? 'Loading…'
+              : 'Export'}
           </button>
           {activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub) && (
             <button
@@ -1093,6 +1194,16 @@ export default function Reports() {
                     />
                   </label>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleExportB2cStateSummary}
+                  disabled={gstInvoicesLoading || customersForB2Loading}
+                  title="State-wise summary: total taxable, IGST, CGST, SGST per state"
+                >
+                  <Download size={16} />
+                  State Excel
+                </button>
               </div>
               <h2 className="gst-rate-title">B2C – Unregistered / retail outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>

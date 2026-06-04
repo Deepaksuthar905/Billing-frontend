@@ -9,20 +9,50 @@ import {
   useGetExpenseByIdQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
+  useGetItemsQuery,
+  useCreateItemMutation,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
 import { INDIA_STATES } from '../utils/indiaStates'
 import './ExpenseNew.css'
 
+const BUSINESS_STATE = 'Rajasthan'
+const PRICE_TYPE_WITH_TAX = 'with_tax'
+const PRICE_TYPE_WITHOUT_TAX = 'without_tax'
 const round2 = (n) => Math.round(Number(n) * 100) / 100
 
 const emptyLineItem = () => ({
+  itemId: '',
   item: '',
+  hsnCode: '',
   description: '',
   qty: 1,
+  unit: 'NONE',
   price: 0,
+  discountPct: 0,
+  discountAmt: 0,
+  taxPct: 18,
+  taxAmt: 0,
   amount: 0,
 })
+
+const recalcLineAmount = (line, type) => {
+  const qty = Number(line.qty) || 0
+  const price = Number(line.price) || 0
+  const taxPct = Number(line.taxPct) || 18
+  const isWithTax = type === PRICE_TYPE_WITH_TAX
+  if (isWithTax) {
+    const amount = round2(qty * price)
+    const taxAmt = taxPct > 0 ? round2((amount * taxPct) / (100 + taxPct)) : 0
+    return { ...line, taxAmt, amount }
+  }
+  const discountPct = Number(line.discountPct) || 0
+  const subtotal = round2(qty * price)
+  const discountAmt = round2((subtotal * discountPct) / 100)
+  const afterDiscount = Math.max(0, round2(subtotal - discountAmt))
+  const taxAmt = round2((afterDiscount * taxPct) / 100)
+  return { ...line, discountAmt, taxAmt, amount: round2(Math.max(0, afterDiscount + taxAmt)) }
+}
 
 function dtToYmd(dt) {
   if (!dt) return new Date().toISOString().slice(0, 10)
@@ -32,27 +62,39 @@ function dtToYmd(dt) {
 }
 
 /** Parse API `description` "Item - detail" into line fields; amount from payment */
-function lineFromExpense(exp) {
+function lineFromExpense(exp, priceType = PRICE_TYPE_WITH_TAX) {
   const cat = exp.expenses_head?.name ?? ''
   const desc = String(exp.description ?? '').trim()
-  const payment = Math.round(Number(exp.payment) || 0)
-  if (!desc) {
-    return { item: cat, description: '', qty: 1, price: payment, amount: payment }
+  const payment = round2(Number(exp.payment) || 0)
+  const rootGst = Number(exp.gst)
+  const taxPct = rootGst > 0 && rootGst <= 100 ? rootGst : 18
+
+  let item = cat
+  let description = ''
+  if (desc) {
+    const parts = desc
+      .split(' - ')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (parts.length <= 1) {
+      item = parts[0] || cat
+    } else {
+      item = parts[0]
+      description = parts.slice(1).join(' - ')
+    }
   }
-  const parts = desc
-    .split(' - ')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (parts.length <= 1) {
-    return { item: parts[0] || cat, description: '', qty: 1, price: payment, amount: payment }
-  }
-  return {
-    item: parts[0],
-    description: parts.slice(1).join(' - '),
-    qty: 1,
-    price: payment,
-    amount: payment,
-  }
+
+  return recalcLineAmount(
+    {
+      ...emptyLineItem(),
+      item,
+      description,
+      qty: 1,
+      price: payment,
+      taxPct,
+    },
+    priceType
+  )
 }
 
 export default function ExpenseNew() {
@@ -62,6 +104,7 @@ export default function ExpenseNew() {
   const exidFromUrl = searchParams.get('exid')
   const expenseFromNav = location.state?.expense
   const hydratedExidRef = useRef(null)
+  const prevPidForPartyStateRef = useRef(undefined)
 
   const [editingExid, setEditingExid] = useState(null)
 
@@ -69,12 +112,23 @@ export default function ExpenseNew() {
   const [expHeadId, setExpHeadId] = useState('')
   const [expNo, setExpNo] = useState('')
   const [expDate, setExpDate] = useState(new Date().toISOString().slice(0, 10))
+  const [stateOfSupply, setStateOfSupply] = useState('')
   const [pid, setPid] = useState('')
   const [payby, setPayby] = useState('')
   const [refno, setRefno] = useState('')
   const [lineItems, setLineItems] = useState([emptyLineItem()])
+  const [priceType, setPriceType] = useState(PRICE_TYPE_WITH_TAX)
   const [roundOff, setRoundOff] = useState(true)
   const [roundOffValue, setRoundOffValue] = useState(0)
+  const [showItemModal, setShowItemModal] = useState(false)
+  const [itemModalForIndex, setItemModalForIndex] = useState(null)
+  const [newItemForm, setNewItemForm] = useState({
+    item_name: '',
+    hsncode: '',
+    description: '',
+    rate: '',
+    gst: '',
+  })
 
   // Add Category modal state
   const [showCatModal, setShowCatModal] = useState(false)
@@ -99,6 +153,8 @@ export default function ExpenseNew() {
   const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
   const paybyAccounts = customersData?.payby ?? []
+  const { data: itemsData, refetch: refetchItems } = useGetItemsQuery(undefined, { skip: false })
+  const items = itemsData?.data ?? []
 
   const [createExpenseHead, { isLoading: isSavingHead }] = useCreateExpenseHeadMutation()
   const [createExpense, { isLoading: isSaving }] = useCreateExpenseMutation()
@@ -107,13 +163,24 @@ export default function ExpenseNew() {
     skip: !exidFromUrl || Boolean(expenseFromNav),
   })
   const [createCustomer, { isLoading: isCreatingParty }] = useCreateCustomerMutation()
+  const [createItem, { isLoading: isCreatingItem }] = useCreateItemMutation()
 
-  // Line item helpers
-  const recalcLine = (line) => {
-    const qty = Number(line.qty) || 0
-    const price = Number(line.price) || 0
-    return { ...line, amount: round2(qty * price) }
-  }
+  useEffect(() => {
+    const partyId = pid ? String(pid) : ''
+    if (!parties.length) return
+    if (!partyId) {
+      prevPidForPartyStateRef.current = partyId
+      return
+    }
+    const selectionChanged = prevPidForPartyStateRef.current !== partyId
+    prevPidForPartyStateRef.current = partyId
+    if (!selectionChanged) return
+    const party = parties.find((c) => String(c.pid ?? c.id) === partyId)
+    const raw = party?.state != null ? String(party.state).trim() : ''
+    if (!raw) return
+    const normalized = INDIA_STATES.find((s) => s.toLowerCase() === raw.toLowerCase()) ?? raw
+    setStateOfSupply(normalized)
+  }, [pid, parties])
 
   useEffect(() => {
     const exp = expenseFromNav ?? expenseFetched
@@ -127,8 +194,10 @@ export default function ExpenseNew() {
     setPid(exp.party != null && exp.party !== '' ? String(exp.party) : '')
     setPayby(exp.payby !== undefined && exp.payby !== null ? String(exp.payby) : '')
     setRefno(exp.refno != null ? String(exp.refno) : '')
-    const line = lineFromExpense(exp)
-    setLineItems([recalcLine(line)])
+    setStateOfSupply(exp.state != null && exp.state !== '' ? String(exp.state) : '')
+    setPriceType(PRICE_TYPE_WITH_TAX)
+    const line = lineFromExpense(exp, PRICE_TYPE_WITH_TAX)
+    setLineItems([line])
     setRoundOff(false)
     setRoundOffValue(0)
   }, [expenseFromNav, expenseFetched])
@@ -146,6 +215,8 @@ export default function ExpenseNew() {
     setPid('')
     setPayby('')
     setRefno('')
+    setStateOfSupply('')
+    setPriceType(PRICE_TYPE_WITH_TAX)
     setLineItems([emptyLineItem()])
     setRoundOff(true)
     setRoundOffValue(0)
@@ -154,11 +225,97 @@ export default function ExpenseNew() {
   const updateLineItem = (index, field, value) => {
     setLineItems((prev) => {
       const next = prev.map((line, i) => (i === index ? { ...line, [field]: value } : line))
-      if (['qty', 'price'].includes(field)) {
-        next[index] = recalcLine(next[index])
+      if (['qty', 'price', 'discountPct', 'discountAmt', 'taxPct', 'taxAmt'].includes(field)) {
+        next[index] = recalcLineAmount(next[index], priceType)
       }
       return next
     })
+  }
+
+  const handlePriceTypeChange = (value) => {
+    setPriceType(value)
+    setLineItems((prev) => prev.map((line) => recalcLineAmount({ ...line }, value)))
+  }
+
+  const handleItemSelect = (index, itemId) => {
+    if (!itemId) return
+    if (itemId === '__add__') {
+      setItemModalForIndex(index)
+      setNewItemForm({ item_name: '', hsncode: '', description: '', rate: '', gst: '' })
+      setShowItemModal(true)
+      return
+    }
+    const invItem = items.find((i) => String(i.id ?? i.item_id) === String(itemId))
+    if (!invItem) return
+    const price = Number(invItem.rate) || 0
+    const taxPct = Number(invItem.gst) || 18
+    setLineItems((prev) =>
+      prev.map((line, i) => {
+        if (i !== index) return line
+        const newLine = {
+          ...line,
+          itemId: String(itemId),
+          item: invItem.item_name ?? invItem.item ?? '',
+          hsnCode: invItem.hsncode ?? invItem.hsnCode ?? '',
+          description: invItem.description ?? '',
+          price,
+          taxPct,
+        }
+        return recalcLineAmount(newLine, priceType)
+      })
+    )
+  }
+
+  const closeItemModal = () => {
+    setShowItemModal(false)
+    setItemModalForIndex(null)
+  }
+
+  const handleCreateItem = async () => {
+    if (!newItemForm.item_name.trim()) {
+      alert('Please enter item name.')
+      return
+    }
+    if (!newItemForm.hsncode.trim()) {
+      alert('Please enter HSN code.')
+      return
+    }
+    const payload = {
+      item_name: newItemForm.item_name.trim(),
+      hsncode: newItemForm.hsncode.trim(),
+      description: newItemForm.description.trim() || undefined,
+      rate: Number(newItemForm.rate) || 0,
+      with_without: 1,
+      gst: Number(newItemForm.gst) || 0,
+      gst_amt: 0,
+    }
+    try {
+      const res = await createItem(payload).unwrap()
+      await refetchItems()
+      const createdId = res?.id ?? res?.item_id ?? res?.data?.id ?? res?.data?.item_id
+      if (createdId != null && itemModalForIndex != null) {
+        const idx = itemModalForIndex
+        setLineItems((prev) =>
+          prev.map((line, i) => {
+            if (i !== idx) return line
+            const newLine = {
+              ...line,
+              itemId: String(createdId),
+              item: payload.item_name,
+              hsnCode: payload.hsncode,
+              description: payload.description ?? '',
+              price: payload.rate,
+              taxPct: payload.gst || 18,
+            }
+            return recalcLineAmount(newLine, priceType)
+          })
+        )
+      }
+      closeItemModal()
+    } catch (err) {
+      console.error('Item create failed:', err)
+      alert(err?.data?.message || err?.data?.detail || 'Could not create item.')
+    }
   }
 
   const addRow = () => setLineItems((prev) => [...prev, emptyLineItem()])
@@ -167,9 +324,17 @@ export default function ExpenseNew() {
     setLineItems((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const totalQty = lineItems.reduce((s, l) => s + (Number(l.qty) || 0), 0)
-  const totalBeforeRound = lineItems.reduce((s, l) => s + (Number(l.amount) || 0), 0)
-  const total = round2(totalBeforeRound + (roundOff ? (Number(roundOffValue) || 0) : 0))
+  const totalQty = round2(lineItems.reduce((s, l) => s + (Number(l.qty) || 0), 0))
+  const totalTax = round2(lineItems.reduce((s, l) => s + (Number(l.taxAmt) || 0), 0))
+  const totalBeforeRound = round2(lineItems.reduce((s, l) => s + (Number(l.amount) || 0), 0))
+  const total = round2(totalBeforeRound + (roundOff ? Number(roundOffValue) || 0 : 0))
+
+  const sameState = stateOfSupply && stateOfSupply.trim() === BUSINESS_STATE
+  const halfTax = sameState ? round2(totalTax / 2) : 0
+  const cgstAmt = sameState ? halfTax : 0
+  const sgstAmt = sameState ? round2(totalTax - halfTax) : 0
+  const igstAmt = sameState ? 0 : round2(totalTax)
+  const taxableAmt = round2(Math.max(0, totalBeforeRound - totalTax))
 
   // Add new category
   const handleAddCategory = async () => {
@@ -270,15 +435,28 @@ export default function ExpenseNew() {
       .filter(Boolean)
       .join(', ')
 
+    const gstTotal = round2(cgstAmt + sgstAmt + igstAmt)
     const payload = {
       exhid: Number(expHeadId),
       receipt_no: expNo.trim() || undefined,
       description: description || undefined,
-      payment: Math.round(total),
+      payment: round2(Number(total) || 0),
       dt: expDate,
+      state: stateOfSupply.trim() || undefined,
       party: pid ? Number(pid) : undefined,
       payby: payby !== '' ? Number(payby) : undefined,
       refno: refno.trim() || undefined,
+      gst: gstTotal,
+      taxable_amt: taxableAmt,
+      cgst: cgstAmt,
+      sgst: sgstAmt,
+      igst: igstAmt,
+      item_id: (() => {
+        const ids = lineItems
+          .map((line) => (line.itemId ? parseInt(line.itemId, 10) : 0))
+          .filter((id) => id > 0)
+        return ids.length > 0 ? ids[0] : undefined
+      })(),
     }
     try {
       if (editingExid != null) {
@@ -373,6 +551,28 @@ export default function ExpenseNew() {
                 className="form-input"
               />
             </div>
+            <div className="form-group exp-state-group">
+              <label>State of Party</label>
+              <select
+                value={stateOfSupply}
+                onChange={(e) => setStateOfSupply(e.target.value)}
+                className="form-input"
+              >
+                <option value="">Select</option>
+                {INDIA_STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <span className="exp-gst-hint text-muted">
+                {stateOfSupply
+                  ? stateOfSupply.trim() === BUSINESS_STATE
+                    ? `Same state (${BUSINESS_STATE}) → CGST + SGST`
+                    : 'Different state → IGST'
+                  : `Business state: ${BUSINESS_STATE}`}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -383,9 +583,22 @@ export default function ExpenseNew() {
               <tr>
                 <th>#</th>
                 <th>ITEM</th>
+                <th>HSN</th>
                 <th>DESCRIPTION</th>
                 <th>QTY</th>
-                <th>PRICE/UNIT</th>
+                <th className="th-price-unit">
+                  <span className="th-main">PRICE/UNIT</span>
+                  <select
+                    value={priceType}
+                    onChange={(e) => handlePriceTypeChange(e.target.value)}
+                    className="form-input input-sm price-type-select"
+                  >
+                    <option value={PRICE_TYPE_WITH_TAX}>With Tax</option>
+                    <option value={PRICE_TYPE_WITHOUT_TAX}>Without Tax</option>
+                  </select>
+                </th>
+                <th>TAX %</th>
+                <th>TAX AMT</th>
                 <th>AMOUNT</th>
                 <th></th>
               </tr>
@@ -395,12 +608,27 @@ export default function ExpenseNew() {
                 <tr key={index}>
                   <td className="td-num">{index + 1}</td>
                   <td>
+                    <select
+                      value={line.itemId || ''}
+                      onChange={(e) => handleItemSelect(index, e.target.value)}
+                      className="form-input input-sm"
+                    >
+                      <option value="">Select item</option>
+                      {items.map((it) => (
+                        <option key={it.id ?? it.item_id} value={it.id ?? it.item_id}>
+                          {it.item_name ?? it.item ?? `Item ${it.item_id ?? it.id}`}
+                        </option>
+                      ))}
+                      <option value="__add__">+ Add new item</option>
+                    </select>
+                  </td>
+                  <td>
                     <input
                       type="text"
-                      value={line.item}
-                      onChange={(e) => updateLineItem(index, 'item', e.target.value)}
+                      value={line.hsnCode}
+                      onChange={(e) => updateLineItem(index, 'hsnCode', e.target.value)}
                       className="form-input input-sm"
-                      placeholder="Item name"
+                      placeholder="HSN"
                     />
                   </td>
                   <td>
@@ -416,12 +644,13 @@ export default function ExpenseNew() {
                     <input
                       type="number"
                       min="0"
+                      step="0.001"
                       value={line.qty}
                       onChange={(e) => updateLineItem(index, 'qty', e.target.value)}
                       className="form-input input-sm td-qty"
                     />
                   </td>
-                  <td>
+                  <td className="td-price-unit">
                     <input
                       type="number"
                       min="0"
@@ -431,7 +660,18 @@ export default function ExpenseNew() {
                       className="form-input input-sm td-price"
                     />
                   </td>
-                  <td className="amount-cell">{formatCurrency(line.amount)}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={line.taxPct || ''}
+                      onChange={(e) => updateLineItem(index, 'taxPct', e.target.value)}
+                      className="form-input input-sm"
+                    />
+                  </td>
+                  <td className="amount-cell">{formatCurrency(line.taxAmt, 2)}</td>
+                  <td className="amount-cell">{formatCurrency(line.amount, 2)}</td>
                   <td>
                     <button
                       type="button"
@@ -448,10 +688,12 @@ export default function ExpenseNew() {
             <tfoot>
               <tr className="totals-row">
                 <td></td>
-                <td colSpan={2}>Total</td>
+                <td colSpan={3}>Total</td>
                 <td>{totalQty}</td>
                 <td></td>
-                <td>{formatCurrency(totalBeforeRound)}</td>
+                <td></td>
+                <td>{formatCurrency(totalTax, 2)}</td>
+                <td>{formatCurrency(totalBeforeRound, 2)}</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -512,6 +754,29 @@ export default function ExpenseNew() {
           </div>
 
           <div className="footer-right">
+            <div className="exp-gst-summary">
+              <div className="exp-gst-summary-row">
+                <span>Taxable</span>
+                <strong>{formatCurrency(taxableAmt, 2)}</strong>
+              </div>
+              {sameState ? (
+                <>
+                  <div className="exp-gst-summary-row">
+                    <span>CGST</span>
+                    <strong>{formatCurrency(cgstAmt, 2)}</strong>
+                  </div>
+                  <div className="exp-gst-summary-row">
+                    <span>SGST</span>
+                    <strong>{formatCurrency(sgstAmt, 2)}</strong>
+                  </div>
+                </>
+              ) : (
+                <div className="exp-gst-summary-row">
+                  <span>IGST</span>
+                  <strong>{formatCurrency(igstAmt, 2)}</strong>
+                </div>
+              )}
+            </div>
             <div className="total-row">
               <label className="round-off-label">
                 <input
@@ -531,12 +796,7 @@ export default function ExpenseNew() {
             </div>
             <div className="total-row total-final">
               <span>Total</span>
-              <input
-                type="text"
-                readOnly
-                value={Math.round(total)}
-                className="form-input input-sm total-input total-display"
-              />
+              <strong>{formatCurrency(total, 2)}</strong>
             </div>
             <div className="footer-actions">
               <button type="button" className="btn btn-secondary">
@@ -618,6 +878,88 @@ export default function ExpenseNew() {
                 disabled={isSavingHead}
               >
                 {isSavingHead ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showItemModal && (
+        <div className="modal-overlay" onClick={closeItemModal}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Add Item</span>
+              <button type="button" className="icon-btn" onClick={closeItemModal} aria-label="Close modal">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>
+                  Item Name <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newItemForm.item_name}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, item_name: e.target.value }))}
+                  className="form-input"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>
+                  HSN Code <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newItemForm.hsncode}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, hsncode: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <input
+                  type="text"
+                  value={newItemForm.description}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, description: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>Rate</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newItemForm.rate}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, rate: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>GST %</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newItemForm.gst}
+                  onChange={(e) => setNewItemForm((p) => ({ ...p, gst: e.target.value }))}
+                  className="form-input"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closeItemModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleCreateItem}
+                disabled={isCreatingItem}
+              >
+                {isCreatingItem ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>

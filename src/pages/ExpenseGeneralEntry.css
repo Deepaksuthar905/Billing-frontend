@@ -1,0 +1,89 @@
+.general-entry-page .ge-form-card {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.ge-form-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text, #1f2937);
+}
+
+.ge-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.ge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.ge-field--full {
+  grid-column: 1 / -1;
+}
+
+.ge-field .form-input {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 6px);
+  font-size: 0.9rem;
+  color: var(--text, #1f2937);
+  background: #fff;
+}
+
+.ge-field .form-input:focus {
+  outline: none;
+  border-color: var(--primary, #4f46e5);
+}
+
+.ge-field-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #dc2626;
+}
+
+.ge-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.ge-form-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ge-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.ge-list-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text, #1f2937);
+}
+
+.ge-list-total {
+  font-size: 0.9rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.ge-empty {
+  text-align: center;
+  padding: 1.25rem;
+  color: var(--text-muted, #6b7280);
+}

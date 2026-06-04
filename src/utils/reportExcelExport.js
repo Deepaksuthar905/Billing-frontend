@@ -223,7 +223,7 @@ export function exportCurrentReport(ctx) {
           row.invNo ?? '',
           row.date ?? '',
           row.value ?? 0,
-          row.taxRate ?? 0,
+          Math.round(row.taxRate ?? 0),
           row.taxableValue ?? 0,
           row.integratedTaxDisplay ?? 0,
           row.centralTaxDisplay ?? 0,
@@ -276,7 +276,7 @@ export function exportCurrentReport(ctx) {
           row.invNo ?? '',
           row.date ?? '',
           row.value ?? 0,
-          row.taxRate ?? 0,
+          Math.round(row.taxRate ?? 0),
           row.taxableValue ?? 0,
           row.integratedTaxDisplay ?? 0,
           row.centralTaxDisplay ?? 0,
@@ -287,6 +287,9 @@ export function exportCurrentReport(ctx) {
     })
     baseName = `B2B_${b2bFrom ?? ''}_${b2bTo ?? ''}`
   } else if (activeReportId === 'gst' && activeGstSub === 'b2c') {
+    const b2cSorted = [...(b2cRows || [])].sort((a, b) =>
+      String(a.placeOfSupply ?? '').localeCompare(String(b.placeOfSupply ?? ''), 'en-IN')
+    )
     sheets.push({
       name: 'B2C Outward',
       rows: [
@@ -306,14 +309,14 @@ export function exportCurrentReport(ctx) {
           'State Tax',
           'Place of Supply',
         ],
-        ...(b2cRows || []).map((row, i) => [
+        ...b2cSorted.map((row, i) => [
           i + 1,
           row.gstin ?? '',
           row.partyName ?? '',
           row.invNo ?? '',
           row.date ?? '',
           row.value ?? 0,
-          row.taxRate ?? 0,
+          Math.round(row.taxRate ?? 0),
           row.taxableValue ?? 0,
           row.integratedTaxDisplay ?? 0,
           row.centralTaxDisplay ?? 0,

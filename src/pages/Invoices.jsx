@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Eye, Edit, RefreshCw, Trash2, ArrowUp, ArrowDown, Hash, Calendar, FileJson, Banknote } from 'lucide-react'
+import { Plus, Eye, Edit, RefreshCw, Trash2, Hash, Calendar, ArrowUpDown, FileJson, Banknote } from 'lucide-react'
 import { API_BASE_URL, useGetInvoicesQuery, useDeleteInvoiceMutation } from '../store/api'
 import { getAuthToken } from '../lib/authToken'
 import { formatCurrency, formatDate } from '../utils/format'
@@ -21,6 +21,16 @@ function exceedsOneMonthRange(fromStr, toStr) {
   return diffDays > 30
 }
 
+function compareInvoices(a, b, sortBy) {
+  if (sortBy === 'inv-asc' || sortBy === 'inv-desc') {
+    const cmp = a.invNoStr.localeCompare(b.invNoStr, undefined, { numeric: true, sensitivity: 'base' })
+    return sortBy === 'inv-asc' ? cmp : -cmp
+  }
+  const diff = a.rawDate - b.rawDate
+  if (sortBy === 'date-asc') return diff
+  return -diff
+}
+
 export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -28,7 +38,7 @@ export default function Invoices() {
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
   const [invNoFilter, setInvNoFilter] = useState('')
-  const [sortOrder, setSortOrder] = useState('desc')
+  const [sortBy, setSortBy] = useState('date-desc')
   const [isSyncing, setIsSyncing] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState(null)
   const [previewInvId, setPreviewInvId] = useState(null)
@@ -70,11 +80,7 @@ export default function Invoices() {
       if (rangeOkForApi && filterTo && inv.rawDate > new Date(filterTo + 'T23:59:59')) return false
       return true
     })
-    .sort((a, b) =>
-      sortOrder === 'asc'
-        ? a.rawDate - b.rawDate
-        : b.rawDate - a.rawDate
-    )
+    .sort((a, b) => compareInvoices(a, b, sortBy))
 
   const allVisibleSelected =
     invoices.length > 0 && invoices.every((inv) => selectedIds.has(inv.id))
@@ -278,15 +284,20 @@ export default function Invoices() {
       <div className="card">
         {/* Row 1: Sort + Status */}
         <div className="filters-row">
-          <button
-            type="button"
-            className={`sort-btn${sortOrder === 'asc' ? ' sort-btn--active' : ''}`}
-            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-            title={sortOrder === 'asc' ? 'Date: Oldest first' : 'Date: Newest first'}
-          >
-            {sortOrder === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
-            <span>{sortOrder === 'asc' ? 'ASC' : 'DESC'}</span>
-          </button>
+          <label className="inv-sort-field">
+            {/* <ArrowUpDown size={15} className="inv-sort-field-icon" aria-hidden /> */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="select-input inv-sort-select"
+              aria-label="Sort invoices"
+            >
+              <option value="date-asc">ASC by date</option>
+              <option value="date-desc">DESC by date</option>
+              <option value="inv-asc">ASC by invoice</option>
+              <option value="inv-desc">DESC by invoice</option>
+            </select>
+          </label>
 
           <select
             value={status}
