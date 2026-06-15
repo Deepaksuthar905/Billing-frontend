@@ -39,7 +39,8 @@ const emptyLineItem = () => ({
 const recalcLineAmount = (line, type) => {
   const qty = Number(line.qty) || 0
   const price = Number(line.price) || 0
-  const taxPct = Number(line.taxPct) || 18
+  const taxPctRaw = Number(line.taxPct)
+  const taxPct = isNaN(taxPctRaw) ? 0 : taxPctRaw
   const isWithTax = type === PRICE_TYPE_WITH_TAX
   if (isWithTax) {
     const amount = round2(qty * price)
@@ -142,6 +143,7 @@ export default function ExpenseNew() {
     mobno: '',
     city: '',
     state: '',
+    gst_no: '',
     gst_reg: true,
     same_state: true,
   })
@@ -364,6 +366,7 @@ export default function ExpenseNew() {
       mobno: '',
       city: '',
       state: '',
+      gst_no: '',
       gst_reg: true,
       same_state: true,
     })
@@ -377,6 +380,7 @@ export default function ExpenseNew() {
       mobno: '',
       city: '',
       state: '',
+      gst_no: '',
       gst_reg: true,
       same_state: true,
     })
@@ -405,6 +409,7 @@ export default function ExpenseNew() {
         mobno: newPartyForm.mobno.trim(),
         city: newPartyForm.city.trim(),
         state: newPartyForm.state.trim(),
+        gst_no: newPartyForm.gst_no.trim() || undefined,
         gst_reg: newPartyForm.gst_reg ? 1 : 0,
         same_state: newPartyForm.same_state ? 1 : 0,
         prtytyp: 1,
@@ -443,8 +448,8 @@ export default function ExpenseNew() {
       payment: round2(Number(total) || 0),
       dt: expDate,
       state: stateOfSupply.trim() || undefined,
-      party: pid ? Number(pid) : undefined,
-      payby: payby !== '' ? Number(payby) : undefined,
+      party: pid && !isNaN(Number(pid)) ? Number(pid) : undefined,
+      payby: payby !== '' && !isNaN(Number(payby)) ? Number(payby) : undefined,
       refno: refno.trim() || undefined,
       gst: gstTotal,
       taxable_amt: taxableAmt,
@@ -581,7 +586,7 @@ export default function ExpenseNew() {
           <table className="exp-items-table">
             <thead>
               <tr>
-                <th>#</th>
+                <th></th>
                 <th>ITEM</th>
                 <th>HSN</th>
                 <th>DESCRIPTION</th>
@@ -608,19 +613,13 @@ export default function ExpenseNew() {
                 <tr key={index}>
                   <td className="td-num">{index + 1}</td>
                   <td>
-                    <select
-                      value={line.itemId || ''}
-                      onChange={(e) => handleItemSelect(index, e.target.value)}
+                    <input
+                      type="text"
+                      value={line.item}
+                      onChange={(e) => updateLineItem(index, 'item', e.target.value)}
                       className="form-input input-sm"
-                    >
-                      <option value="">Select item</option>
-                      {items.map((it) => (
-                        <option key={it.id ?? it.item_id} value={it.id ?? it.item_id}>
-                          {it.item_name ?? it.item ?? `Item ${it.item_id ?? it.id}`}
-                        </option>
-                      ))}
-                      <option value="__add__">+ Add new item</option>
-                    </select>
+                      placeholder="Item name"
+                    />
                   </td>
                   <td>
                     <input
@@ -665,7 +664,7 @@ export default function ExpenseNew() {
                       type="number"
                       min="0"
                       step="0.01"
-                      value={line.taxPct || ''}
+                      value={line.taxPct ?? ''}
                       onChange={(e) => updateLineItem(index, 'taxPct', e.target.value)}
                       className="form-input input-sm"
                     />
@@ -714,13 +713,13 @@ export default function ExpenseNew() {
                 onChange={(e) => handlePartyChange(e.target.value)}
                 className="form-input"
               >
-                <option value="">Select Party / Account</option>
-                {parties.map((c) => (
-                  <option key={c.pid ?? c.id} value={c.pid ?? c.id}>
-                    {c.partyname ?? c.name ?? `Party ${c.pid ?? c.id}`}
+                <option value="">-- Select Party --</option>
+                {parties.map((p) => (
+                  <option key={p.pid ?? p.id} value={String(p.pid ?? p.id)}>
+                    {p.partyname ?? p.name}
                   </option>
                 ))}
-                <option value="__add__">+ Add new party</option>
+                <option value="__add__">+ Add New Party</option>
               </select>
             </div>
             <div className="form-group">
@@ -730,9 +729,9 @@ export default function ExpenseNew() {
                 onChange={(e) => setPayby(e.target.value)}
                 className="form-input"
               >
-                <option value="">Select Pay By</option>
+                <option value="">-- Select Pay By --</option>
                 {paybyAccounts.map((p) => (
-                  <option key={p.pbid ?? p.id} value={p.pbid ?? p.id}>
+                  <option key={p.pbid ?? p.id} value={String(p.pbid ?? p.id)}>
                     {p.name ?? `PayBy ${p.pbid ?? p.id}`}
                   </option>
                 ))}
@@ -1007,6 +1006,17 @@ export default function ExpenseNew() {
                   value={newPartyForm.city}
                   onChange={(e) => setNewPartyForm((p) => ({ ...p, city: e.target.value }))}
                   className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>GST No</label>
+                <input
+                  type="text"
+                  value={newPartyForm.gst_no}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, gst_no: e.target.value.toUpperCase() }))}
+                  className="form-input"
+                  placeholder="e.g. 27ABCDE1234F1Z5"
+                  maxLength={15}
                 />
               </div>
               <div className="form-group">

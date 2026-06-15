@@ -178,6 +178,7 @@ const gstSubOptions = [
   { id: 'doc-summary', title: 'Documents issued' },
   { id: 'gstr3b', title: 'GSTR-3B' },
   { id: 'purchase-reg', title: 'Purchase register' },
+  { id: 'gst-2b', title: 'GST 2B' },
   { id: 'gst-rate', title: 'GST Rate Report' },
 ]
 
@@ -217,6 +218,8 @@ export default function Reports() {
   const [gstr3bTo, setGstr3bTo] = useState(() => defaultRangeCurrentMonth().to)
   const [purchaseRegFrom, setPurchaseRegFrom] = useState(() => defaultRangeCurrentMonth().from)
   const [purchaseRegTo, setPurchaseRegTo] = useState(() => defaultRangeCurrentMonth().to)
+  const [gst2bFrom, setGst2bFrom] = useState(() => defaultRangeCurrentMonth().from)
+  const [gst2bTo, setGst2bTo] = useState(() => defaultRangeCurrentMonth().to)
   const [ledgerFrom, setLedgerFrom] = useState(() => defaultRangeCurrentMonth().from)
   const [ledgerTo, setLedgerTo] = useState(() => defaultRangeCurrentMonth().to)
   /** Applied to API only after Apply — draft dates stay in ledgerFrom / ledgerTo */
@@ -254,6 +257,9 @@ export default function Reports() {
       } else if (activeGstSub === 'purchase-reg') {
         setPurchaseRegFrom(r.from)
         setPurchaseRegTo(r.to)
+      } else if (activeGstSub === 'gst-2b') {
+        setGst2bFrom(r.from)
+        setGst2bTo(r.to)
       } else if (activeGstSub === 'gst-rate') {
         setGstRateFrom(r.from)
         setGstRateTo(r.to)
@@ -293,7 +299,7 @@ export default function Reports() {
 
   const { data: vendorData } = useGetCustomersQuery(
     { prtytyp: 1 },
-    { skip: !(activeReportId === 'gst' && activeGstSub === 'purchase-reg') }
+    { skip: !(activeReportId === 'gst' && (activeGstSub === 'purchase-reg' || activeGstSub === 'gst-2b')) }
   )
   const vendorPartyByPid = useMemo(
     () => buildPartyMapByPid(vendorData?.data ?? []),
@@ -322,6 +328,11 @@ export default function Reports() {
   const { data: purchaseRegData, isLoading: purchaseRegLoading } = useGetPurchaseOrdersQuery(
     { from: purchaseRegFrom, to: purchaseRegTo },
     { skip: !(activeReportId === 'gst' && activeGstSub === 'purchase-reg') }
+  )
+
+  const { data: gst2bPurchaseData, isLoading: gst2bLoading } = useGetPurchaseOrdersQuery(
+    { from: gst2bFrom, to: gst2bTo },
+    { skip: !(activeReportId === 'gst' && activeGstSub === 'gst-2b') }
   )
 
   const invoices = invoicesData?.data ?? []
@@ -414,6 +425,29 @@ export default function Reports() {
         cgst: purchaseRegRows.reduce((s, r) => s + (r.cgst || 0), 0),
         sgst: purchaseRegRows.reduce((s, r) => s + (r.sgst || 0), 0),
         value: purchaseRegRows.reduce((s, r) => s + (r.value || 0), 0),
+      }
+    : null
+
+  const gst2bRaw = gst2bPurchaseData?.data ?? []
+  const gst2bFiltered =
+    gst2bFrom && gst2bTo
+      ? gst2bRaw.filter((po) => {
+          const d = parseIsoDatePart(po.dt ?? po.date)
+          return d != null && d >= gst2bFrom && d <= gst2bTo
+        })
+      : gst2bRaw
+  const gst2bAllRows = buildPurchaseRegisterRows(gst2bFiltered, vendorPartyByPid)
+  const gst2bRows = gst2bAllRows.filter((r) => {
+    const g = String(r.gstin ?? '').trim()
+    return g && g !== '0' && g.length >= 10
+  })
+  const gst2bTotals = gst2bRows.length
+    ? {
+        taxable: gst2bRows.reduce((s, r) => s + (r.taxableValue || 0), 0),
+        igst: gst2bRows.reduce((s, r) => s + (r.igst || 0), 0),
+        cgst: gst2bRows.reduce((s, r) => s + (r.cgst || 0), 0),
+        sgst: gst2bRows.reduce((s, r) => s + (r.sgst || 0), 0),
+        value: gst2bRows.reduce((s, r) => s + (r.value || 0), 0),
       }
     : null
 
@@ -1716,6 +1750,191 @@ export default function Reports() {
                         </td>
                         <td className="text-right">
                           <strong>{formatReportAmount(purchaseRegTotals.sgst)}</strong>
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'gst-2b' && (
+            <div className="purchase-reg-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gst2bFrom}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGst2bFrom(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gst2bTo}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGst2bTo(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={gst2bLoading || !gst2bRows.length}
+                  onClick={() => {
+                    downloadExcelWorkbook(
+                      [
+                        {
+                          name: 'GST 2B',
+                          rows: [
+                            ['GST 2B – Inward Supplies (GST-Registered Parties)'],
+                            ['Period', `${gst2bFrom} to ${gst2bTo}`],
+                            ['Total Entries', gst2bRows.length],
+                            [],
+                            [
+                              'Sno.',
+                              'GSTIN of Supplier',
+                              'Party Name',
+                              'Invoice No.',
+                              'Invoice Date',
+                              'Invoice Value',
+                              'Rate (%)',
+                              'Taxable Value',
+                              'IGST',
+                              'CGST',
+                              'SGST',
+                              'Place of Supply',
+                            ],
+                            ...gst2bRows.map((r, i) => [
+                              i + 1,
+                              r.gstin,
+                              r.partyName,
+                              r.invNo,
+                              r.date,
+                              r.value,
+                              r.taxRate > 0 ? r.taxRate : 0,
+                              r.taxableValue,
+                              r.igst,
+                              r.cgst,
+                              r.sgst,
+                              r.placeOfSupply || '',
+                            ]),
+                            ...(gst2bTotals
+                              ? [
+                                  [],
+                                  [
+                                    'Total',
+                                    '',
+                                    '',
+                                    '',
+                                    '',
+                                    gst2bTotals.value,
+                                    '',
+                                    gst2bTotals.taxable,
+                                    gst2bTotals.igst,
+                                    gst2bTotals.cgst,
+                                    gst2bTotals.sgst,
+                                    '',
+                                  ],
+                                ]
+                              : []),
+                          ],
+                        },
+                      ],
+                      `GST_2B_${gst2bFrom}_${gst2bTo}.xlsx`
+                    )
+                  }}
+                  title="Download GST 2B Excel"
+                >
+                  <Download size={16} />
+                  Export Excel
+                </button>
+              </div>
+              <h2 className="gst-rate-title">GST 2B – Inward Supplies (GST-Registered Parties)</h2>
+              <p className="report-placeholder text-muted gstr3b-note" style={{ marginBottom: '0.75rem' }}>
+                {gst2bAllRows.length > gst2bRows.length && (
+                  <span style={{ marginLeft: '0.5rem', color: '#e67e22' }}>
+                    ({gst2bAllRows.length - gst2bRows.length} entries without GSTIN excluded)
+                  </span>
+                )}
+              </p>
+              {gst2bLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              {!gst2bLoading && !gst2bRows.length && (
+                <p className="report-placeholder text-muted">
+                  No GST-registered party purchases found for this period.
+                </p>
+              )}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table purchase-reg-gstr2b-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>GSTIN of Supplier</th>
+                      <th>Party Name</th>
+                      <th>Invoice No.</th>
+                      <th>Invoice Date</th>
+                      <th className="text-right">Invoice Value</th>
+                      <th className="text-right">Rate (%)</th>
+                      <th className="text-right">Taxable Value</th>
+                      <th className="text-right">IGST</th>
+                      <th className="text-right">CGST</th>
+                      <th className="text-right">SGST</th>
+                      <th>Place of Supply</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gst2bRows.map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{formatRegisterGstin(row.gstin)}</td>
+                        <td>{getDisplayValue(row.partyName)}</td>
+                        <td>{getDisplayValue(row.invNo)}</td>
+                        <td>{getDisplayValue(row.date)}</td>
+                        <td className="text-right">{formatReportAmount(row.value)}</td>
+                        <td className="text-right">
+                          {row.taxRate > 0 ? `${Number(row.taxRate).toFixed(0)}%` : '—'}
+                        </td>
+                        <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
+                        <td className="text-right">{formatReportAmount(row.igst)}</td>
+                        <td className="text-right">{formatReportAmount(row.cgst)}</td>
+                        <td className="text-right">{formatReportAmount(row.sgst)}</td>
+                        <td>{row.placeOfSupply || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {gst2bTotals && (
+                    <tfoot>
+                      <tr className="purchase-reg-tfoot">
+                        <td colSpan={5}>
+                          <strong>Total</strong> ({gst2bRows.length} bills)
+                        </td>
+                        <td className="text-right">
+                          <strong>{formatReportAmount(gst2bTotals.value)}</strong>
+                        </td>
+                        <td />
+                        <td className="text-right">
+                          <strong>{formatReportAmount(gst2bTotals.taxable)}</strong>
+                        </td>
+                        <td className="text-right">
+                          <strong>{formatReportAmount(gst2bTotals.igst)}</strong>
+                        </td>
+                        <td className="text-right">
+                          <strong>{formatReportAmount(gst2bTotals.cgst)}</strong>
+                        </td>
+                        <td className="text-right">
+                          <strong>{formatReportAmount(gst2bTotals.sgst)}</strong>
                         </td>
                         <td />
                       </tr>

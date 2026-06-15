@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Edit, Plus, Search, Trash2 } from 'lucide-react'
-import { useGetExpenseHeadsQuery, useGetExpensesQuery, useDeleteExpenseMutation } from '../store/api'
+import { useGetExpenseHeadsQuery, useGetExpensesQuery, useDeleteExpenseMutation, useGetCustomersQuery } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Expenses.css'
-
-const PAYBY_LABELS = { 0: 'Cash', 1: 'Bank', 2: 'UPI', 3: 'Cheque' }
 
 /** YYYY-MM-DD from API date (avoids timezone shifting whole-day compares). */
 function parseIsoDatePart(value) {
@@ -79,6 +77,16 @@ export default function Expenses() {
   const { data: expensesData, isLoading: expensesLoading } = useGetExpensesQuery(undefined, {
     refetchOnMountOrArgChange: 120,
   })
+  const { data: customersData } = useGetCustomersQuery({ prtytyp: 1 }, { refetchOnMountOrArgChange: 120 })
+  const paybyAccounts = customersData?.payby ?? []
+  const paybyNameMap = useMemo(() => {
+    const map = new Map()
+    for (const p of paybyAccounts) {
+      const id = p.pbid ?? p.id
+      if (id != null) map.set(String(id), p.name ?? `PayBy ${id}`)
+    }
+    return map
+  }, [paybyAccounts])
 
   const allHeads = headsData?.data ?? []
   const allExpenses = expensesData?.data ?? []
@@ -318,7 +326,7 @@ export default function Expenses() {
                       <td className="font-medium">{exp.receipt_no ?? exp.exid}</td>
                       <td>{exp.expenses_head?.name ?? '—'}</td>
                       <td>{exp.party_relation?.partyname ?? '—'}</td>
-                      <td>{PAYBY_LABELS[exp.payby] ?? '—'}</td>
+                      <td>{exp.payby != null ? (paybyNameMap.get(String(exp.payby)) ?? '—') : '—'}</td>
                       <td>{formatCurrency(Number(exp.payment) || 0)}</td>
                       <td>
                         <div className="action-btns">

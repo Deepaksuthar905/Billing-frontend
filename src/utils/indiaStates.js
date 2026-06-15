@@ -1,5 +1,4 @@
 export const INDIA_STATES = [
-  'Other State',
   'Outside India',
   'Andaman and Nicobar Islands',
   'Andhra Pradesh',
