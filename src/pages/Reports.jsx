@@ -7,6 +7,7 @@ import {
   useGetPurchaseOrdersQuery,
   useGetLedgerQuery,
   useGetExpenseReportQuery,
+  useGetExpensesQuery,
   useGetPayByListQuery,
   useGetCustomersQuery,
 } from '../store/api'
@@ -330,10 +331,16 @@ export default function Reports() {
     { skip: !(activeReportId === 'gst' && activeGstSub === 'purchase-reg') }
   )
 
-  const { data: gst2bPurchaseData, isLoading: gst2bLoading } = useGetPurchaseOrdersQuery(
+  const { data: gst2bPurchaseData, isLoading: gst2bPurchaseLoading } = useGetPurchaseOrdersQuery(
     { from: gst2bFrom, to: gst2bTo },
     { skip: !(activeReportId === 'gst' && activeGstSub === 'gst-2b') }
   )
+
+  const { data: gst2bExpenseData, isLoading: gst2bExpenseLoading } = useGetExpensesQuery(
+    { from: gst2bFrom, to: gst2bTo },
+    { skip: !(activeReportId === 'gst' && activeGstSub === 'gst-2b') }
+  )
+  const gst2bLoading = gst2bPurchaseLoading || gst2bExpenseLoading
 
   const invoices = invoicesData?.data ?? []
   const fromDt = gstr1From ? new Date(gstr1From) : null
@@ -429,18 +436,63 @@ export default function Reports() {
     : null
 
   const gst2bRaw = gst2bPurchaseData?.data ?? []
-  const gst2bFiltered =
+  const gst2bPurchFiltered =
     gst2bFrom && gst2bTo
       ? gst2bRaw.filter((po) => {
           const d = parseIsoDatePart(po.dt ?? po.date)
           return d != null && d >= gst2bFrom && d <= gst2bTo
         })
       : gst2bRaw
-  const gst2bAllRows = buildPurchaseRegisterRows(gst2bFiltered, vendorPartyByPid)
-  const gst2bRows = gst2bAllRows.filter((r) => {
+  const gst2bPurchAllRows = buildPurchaseRegisterRows(gst2bPurchFiltered, vendorPartyByPid)
+  const gst2bPurchRows = gst2bPurchAllRows.filter((r) => {
     const g = String(r.gstin ?? '').trim()
     return g && g !== '0' && g.length >= 10
   })
+
+  // Expenses with GST-registered party
+  const gst2bExpRaw = gst2bExpenseData?.data ?? []
+  const gst2bExpFiltered =
+    gst2bFrom && gst2bTo
+      ? gst2bExpRaw.filter((exp) => {
+          const d = parseIsoDatePart(exp.dt ?? exp.date)
+          return d != null && d >= gst2bFrom && d <= gst2bTo
+        })
+      : gst2bExpRaw
+  const gst2bExpRows = gst2bExpFiltered
+    .filter((exp) => {
+      const g = String(exp.party_relation?.gst_no ?? '').trim()
+      return g && g !== '0' && g.length >= 10
+    })
+    .map((exp) => {
+      const igst = Math.round((Number(exp.igst) || 0) * 100) / 100
+      const cgst = Math.round((Number(exp.cgst) || 0) * 100) / 100
+      const sgst = Math.round((Number(exp.sgst) || 0) * 100) / 100
+      const totalTax = igst + cgst + sgst
+      const value = Math.round((Number(exp.payment) || 0) * 100) / 100
+      const taxable = Math.round((Number(exp.taxable_amt) || (value - totalTax > 0 ? value - totalTax : value)) * 100) / 100
+      const taxRate = taxable > 0 && totalTax > 0 ? Math.round((totalTax / taxable) * 100) : 0
+      return {
+        gstin: String(exp.party_relation?.gst_no ?? '').trim(),
+        partyName: exp.party_relation?.partyname ?? '—',
+        invNo: exp.receipt_no ?? exp.exid,
+        date: exp.dt,
+        value,
+        taxRate,
+        taxableValue: taxable,
+        igst,
+        cgst,
+        sgst,
+        placeOfSupply: exp.party_relation?.state ?? '',
+        source: 'expense',
+      }
+    })
+
+  const gst2bAllRows = [...gst2bPurchRows, ...gst2bExpRows].sort((a, b) => {
+    const da = parseIsoDatePart(a.date) ?? ''
+    const db = parseIsoDatePart(b.date) ?? ''
+    return da.localeCompare(db)
+  })
+  const gst2bRows = gst2bAllRows
   const gst2bTotals = gst2bRows.length
     ? {
         taxable: gst2bRows.reduce((s, r) => s + (r.taxableValue || 0), 0),
@@ -1801,7 +1853,7 @@ export default function Reports() {
                           rows: [
                             ['GST 2B – Inward Supplies (GST-Registered Parties)'],
                             ['Period', `${gst2bFrom} to ${gst2bTo}`],
-                            ['Total Entries', gst2bRows.length],
+                            ['Total Entries', gst2bRows.length, `(${gst2bPurchRows.length} Purchases + ${gst2bExpRows.length} Expenses)`],
                             [],
                             [
                               'Sno.',
@@ -1816,6 +1868,7 @@ export default function Reports() {
                               'CGST',
                               'SGST',
                               'Place of Supply',
+                              'Source',
                             ],
                             ...gst2bRows.map((r, i) => [
                               i + 1,
@@ -1830,6 +1883,7 @@ export default function Reports() {
                               r.cgst,
                               r.sgst,
                               r.placeOfSupply || '',
+                              r.source === 'expense' ? 'Expense' : 'Purchase',
                             ]),
                             ...(gst2bTotals
                               ? [
@@ -1846,6 +1900,7 @@ export default function Reports() {
                                     gst2bTotals.igst,
                                     gst2bTotals.cgst,
                                     gst2bTotals.sgst,
+                                    '',
                                     '',
                                   ],
                                 ]
@@ -1864,16 +1919,17 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">GST 2B – Inward Supplies (GST-Registered Parties)</h2>
               <p className="report-placeholder text-muted gstr3b-note" style={{ marginBottom: '0.75rem' }}>
-                {gst2bAllRows.length > gst2bRows.length && (
-                  <span style={{ marginLeft: '0.5rem', color: '#e67e22' }}>
-                    ({gst2bAllRows.length - gst2bRows.length} entries without GSTIN excluded)
+                {/* Jin parties ka GSTIN registered hai unse ki purchases &amp; expenses — yahi ITC (Input Tax Credit) claim hogi. */}
+                {gst2bRows.length > 0 && (
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    ({gst2bPurchRows.length} purchases + {gst2bExpRows.length} expenses)
                   </span>
                 )}
               </p>
               {gst2bLoading && <p className="report-placeholder text-muted">Loading...</p>}
               {!gst2bLoading && !gst2bRows.length && (
                 <p className="report-placeholder text-muted">
-                  No GST-registered party purchases found for this period.
+                  No GST-registered party purchases/expenses found for this period.
                 </p>
               )}
               <div className="gst-rate-table-wrap">
@@ -1892,6 +1948,7 @@ export default function Reports() {
                       <th className="text-right">CGST</th>
                       <th className="text-right">SGST</th>
                       <th>Place of Supply</th>
+                      <th>Source</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1911,6 +1968,9 @@ export default function Reports() {
                         <td className="text-right">{formatReportAmount(row.cgst)}</td>
                         <td className="text-right">{formatReportAmount(row.sgst)}</td>
                         <td>{row.placeOfSupply || '—'}</td>
+                        <td style={{ fontSize: '0.75rem', color: row.source === 'expense' ? '#2980b9' : '#27ae60' }}>
+                          {row.source === 'expense' ? 'Expense' : 'Purchase'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1936,6 +1996,7 @@ export default function Reports() {
                         <td className="text-right">
                           <strong>{formatReportAmount(gst2bTotals.sgst)}</strong>
                         </td>
+                        <td />
                         <td />
                       </tr>
                     </tfoot>
