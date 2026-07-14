@@ -69,7 +69,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger', 'GeneralEntry'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger', 'GeneralEntry', 'Employee', 'SalaryPayment'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     login: builder.mutation({
@@ -359,6 +359,53 @@ export const billingApi = createApi({
       query: (exid) => ({ url: `/delexpenses/${exid}`, method: 'POST' }),
       invalidatesTags: ['Expense', 'ExpenseHead', 'Dashboard'],
     }),
+
+    // Employees
+    getEmployees: builder.query({
+      query: (arg) => {
+        const params = new URLSearchParams()
+        const search = typeof arg === 'object' ? arg?.search : undefined
+        const isActive = typeof arg === 'object' ? arg?.is_active : undefined
+        if (search) params.set('search', search)
+        if (isActive !== undefined && isActive !== null && isActive !== '') {
+          params.set('is_active', String(isActive))
+        }
+        const qs = params.toString()
+        return { url: qs ? `/employees?${qs}` : '/employees' }
+      },
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map((r) => ({ type: 'Employee', id: r.empid ?? r.id })), 'Employee']
+          : ['Employee'],
+    }),
+    createEmployee: builder.mutation({
+      query: (body) => ({ url: '/employees', method: 'POST', body }),
+      invalidatesTags: ['Employee'],
+    }),
+
+    // Salary payments
+    getSalaryPayments: builder.query({
+      query: ({ from, to, empid, salary_month, payment_type } = {}) => {
+        const params = new URLSearchParams()
+        if (from) params.set('from', from)
+        if (to) params.set('to', to)
+        if (empid) params.set('empid', String(empid))
+        if (salary_month) params.set('salary_month', salary_month)
+        if (payment_type) params.set('payment_type', payment_type)
+        const qs = params.toString()
+        return { url: qs ? `/salary-payments?${qs}` : '/salary-payments' }
+      },
+      transformResponse: normalizeList,
+      providesTags: (result) =>
+        result?.data
+          ? [...result.data.map((r) => ({ type: 'SalaryPayment', id: r.salid ?? r.id })), 'SalaryPayment']
+          : ['SalaryPayment'],
+    }),
+    createSalaryPayment: builder.mutation({
+      query: (body) => ({ url: '/salary-payments', method: 'POST', body }),
+      invalidatesTags: ['SalaryPayment', 'Ledger', 'Dashboard'],
+    }),
   }),
 })
 
@@ -398,4 +445,8 @@ export const {
   useUpdateExpenseMutation,
   useDeleteExpenseMutation,
   useGetExpenseReportQuery,
+  useGetEmployeesQuery,
+  useCreateEmployeeMutation,
+  useGetSalaryPaymentsQuery,
+  useCreateSalaryPaymentMutation,
 } = billingApi

@@ -12,6 +12,7 @@ import {
   FileText,
   BarChart3,
   Receipt,
+  Wallet,
 } from 'lucide-react'
 import './Sidebar.css'
 
@@ -34,6 +35,7 @@ const navItems = [
     children: [{ to: '/expenses/general-entry', label: 'Journal Entry' }],
   },
   { to: '/inventory', icon: Boxes, label: 'Inventory' },
+  { to: '/salary', icon: Wallet, label: 'Salary' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ]
@@ -41,7 +43,7 @@ const navItems = [
 export default function Sidebar({ isOpen, onClose, isMobile }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const isInvoicesRoute = useMemo(() => location.pathname.startsWith('/invoices'), [location.pathname])
+  const isInvoicesRoute = useMemo(() => location.pathname.startsWith('/invoices'), [location.pathname])   
   const [invoicesOpen, setInvoicesOpen] = useState(false)
   const isExpensesRoute = useMemo(() => location.pathname.startsWith('/expenses'), [location.pathname])
   const [expensesOpen, setExpensesOpen] = useState(false)

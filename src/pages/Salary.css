@@ -1,0 +1,200 @@
+.salary-page .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.salary-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.9rem;
+}
+
+.salary-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.salary-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.salary-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.salary-filters {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.salary-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.salary-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.salary-date-field .form-input {
+  min-width: 150px;
+}
+
+.salary-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+}
+
+.salary-form-card {
+  padding: 1.25rem;
+}
+
+.salary-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.salary-form-grid--full {
+  grid-column: 1 / -1;
+}
+
+.salary-form-grid .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.salary-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: var(--bg-muted, #f9fafb);
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+}
+
+.salary-summary-bar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.salary-summary-net {
+  margin-left: auto;
+  text-align: right;
+}
+
+.salary-summary-net strong {
+  font-size: 1.25rem;
+  color: var(--primary, #2563eb);
+}
+
+.salary-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.modal-box--wide {
+  max-width: 720px;
+  width: 100%;
+}
+
+/* Employee modal (shared modal primitives) */
+.salary-page .modal-overlay,
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.salary-page .modal-box,
+.modal-box {
+  background: var(--card-bg, #fff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-md, 0 4px 24px rgba(0, 0, 0, 0.12));
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.salary-page .modal-header,
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.salary-page .modal-title,
+.modal-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.salary-page .modal-close,
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted, #6b7280);
+  padding: 0.25rem;
+}
+
+.salary-page .customer-form,
+.customer-form {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.salary-page .form-group label,
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+.salary-page .modal-actions,
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+  .salary-header-actions {
+    width: 100%;
+  }
+  .salary-header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

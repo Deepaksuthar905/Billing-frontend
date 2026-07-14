@@ -1,0 +1,278 @@
+.sal-receipt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 1rem;
+  overflow-y: auto;
+  z-index: 1100;
+}
+
+.sal-receipt-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+}
+
+.sal-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sal-action-btn--pdf {
+  background: #6366f1;
+  color: #fff;
+}
+
+.sal-action-btn--pdf:hover {
+  background: #4f46e5;
+}
+
+.sal-action-btn--close {
+  background: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+/* A4 portrait: 210mm × 297mm */
+.sal-receipt-sheet {
+  position: relative;
+  background: #fff;
+  width: 210mm;
+  min-height: 297mm;
+  max-width: 210mm;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 14mm 16mm 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 0.9rem;
+  color: #111;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.sal-receipt-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+.sal-receipt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.sal-receipt-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.sal-receipt-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.sal-receipt-company {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.sal-receipt-meta {
+  text-align: right;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.sal-receipt-rule {
+  border: none;
+  border-top: 1px solid #111;
+  margin: 0.85rem 0 1.25rem;
+}
+
+.sal-receipt-info {
+  margin-bottom: 1.75rem;
+}
+
+.sal-info-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.sal-info-row span {
+  min-width: 140px;
+  color: #333;
+}
+
+.sal-receipt-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.sal-receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sal-receipt-table th {
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #ccc;
+}
+
+.sal-receipt-table td {
+  padding: 0.45rem 0;
+  font-size: 0.92rem;
+}
+
+.sal-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sal-total-row td {
+  padding-top: 0.65rem;
+  border-top: 1px solid #ddd;
+}
+
+.sal-net-payable {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+  padding-top: 0.75rem;
+}
+
+.sal-net-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sal-net-label strong {
+  font-size: 1rem;
+}
+
+.sal-net-hint {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.sal-net-amount {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.sal-receipt-spacer {
+  flex: 1;
+  min-height: 3rem;
+}
+
+.sal-receipt-watermark {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.sal-receipt-watermark img {
+  width: 240px;
+  height: 240px;
+  object-fit: contain;
+}
+
+.sal-receipt-footer {
+  margin-top: auto;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.sal-footer-website {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.sal-footer-bar {
+  background: #1e5a9e;
+  color: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.75rem;
+  margin: 0 -16mm;
+}
+
+@media (max-width: 900px) {
+  .sal-receipt-sheet {
+    width: 100%;
+    max-width: min(210mm, 100%);
+    min-height: calc(100vw * 297 / 210);
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .sal-receipt-cols {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .sal-receipt-sheet {
+    padding: 10mm 10mm 0;
+    min-height: calc(100vw * 297 / 210);
+  }
+
+  .sal-footer-bar {
+    margin: 0 -10mm;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .sal-receipt-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    box-shadow: none;
+  }
+}

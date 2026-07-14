@@ -15,6 +15,8 @@ import InvoicePayInList from './pages/InvoicePayInList'
 import Expenses from './pages/Expenses'
 import ExpenseNew from './pages/ExpenseNew'
 import ExpenseGeneralEntry from './pages/ExpenseGeneralEntry'
+import Salary from './pages/Salary'
+import SalaryNew from './pages/SalaryNew'
 
 function App() {
   return (
@@ -42,6 +44,8 @@ function App() {
         <Route path="expenses" element={<Expenses />} />
         <Route path="expenses/general-entry" element={<ExpenseGeneralEntry />} />
         <Route path="expenses/new" element={<ExpenseNew />} />
+        <Route path="salary" element={<Salary />} />
+        <Route path="salary/new" element={<SalaryNew />} />
         <Route path="reports" element={<Reports />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
