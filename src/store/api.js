@@ -406,6 +406,24 @@ export const billingApi = createApi({
       query: (body) => ({ url: '/salary-payments', method: 'POST', body }),
       invalidatesTags: ['SalaryPayment', 'Ledger', 'Dashboard'],
     }),
+    getSalaryPaymentById: builder.query({
+      query: (salid) => ({ url: `/salary-payments/${salid}` }),
+      transformResponse: (r) => {
+        if (!r || typeof r !== 'object') return null
+        if (r.data && typeof r.data === 'object' && !Array.isArray(r.data)) return r.data
+        return r
+      },
+      providesTags: (_r, _e, salid) => [{ type: 'SalaryPayment', id: salid }, 'SalaryPayment'],
+    }),
+    updateSalaryPayment: builder.mutation({
+      query: ({ salid, ...body }) => ({ url: `/salary-payments/${salid}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { salid }) => [
+        { type: 'SalaryPayment', id: salid },
+        'SalaryPayment',
+        'Ledger',
+        'Dashboard',
+      ],
+    }),
   }),
 })
 
@@ -449,4 +467,6 @@ export const {
   useCreateEmployeeMutation,
   useGetSalaryPaymentsQuery,
   useCreateSalaryPaymentMutation,
+  useGetSalaryPaymentByIdQuery,
+  useUpdateSalaryPaymentMutation,
 } = billingApi

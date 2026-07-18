@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
   useCreateSalaryPaymentMutation,
+  useUpdateSalaryPaymentMutation,
+  useGetSalaryPaymentByIdQuery,
   useGetEmployeesQuery,
   useGetPayByListQuery,
 } from '../store/api'
 import { formatCurrency } from '../utils/format'
-import { currentSalaryMonth, encodeDeductionRemarks } from '../utils/salaryDeductions'
+import { lastSalaryMonth, encodeDeductionRemarks, parseDeductionBreakdown } from '../utils/salaryDeductions'
 import './Salary.css'
 
 const round2 = (n) => Math.round(Number(n) * 100) / 100
@@ -16,17 +18,44 @@ function todayYmd() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function dtToYmd(dt) {
+  if (!dt) return todayYmd()
+  const m = String(dt).match(/^(\d{4}-\d{2}-\d{2})/)
+  if (m) return m[1]
+  const d = new Date(dt)
+  if (Number.isNaN(d.getTime())) return todayYmd()
+  return d.toISOString().slice(0, 10)
+}
+
+function amountStr(v) {
+  if (v == null || v === '') return '0'
+  return String(Number(v) || 0)
+}
+
 export default function SalaryNew() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { salid: salidParam } = useParams()
+  const paymentFromNav = location.state?.payment ?? null
+  const editingSalid = salidParam ? Number(salidParam) : paymentFromNav?.salid ?? paymentFromNav?.id ?? null
+  const isEdit = editingSalid != null && !Number.isNaN(Number(editingSalid))
+  const hydratedRef = useRef(null)
+
   const { data: empData, isLoading: empLoading } = useGetEmployeesQuery({ is_active: 1 })
   const { data: payByData } = useGetPayByListQuery()
-  const [createPayment, { isLoading: isSaving }] = useCreateSalaryPaymentMutation()
+  const { data: paymentFetched } = useGetSalaryPaymentByIdQuery(editingSalid, {
+    skip: !isEdit,
+  })
+  const [createPayment, { isLoading: isCreating }] = useCreateSalaryPaymentMutation()
+  const [updatePayment, { isLoading: isUpdating }] = useUpdateSalaryPaymentMutation()
+  const isSaving = isCreating || isUpdating
 
   const employees = empData?.data ?? []
   const paybyList = payByData?.data ?? []
+  const paymentSource = paymentFetched ?? paymentFromNav
 
   const [empid, setEmpid] = useState('')
-  const [salaryMonth, setSalaryMonth] = useState(currentSalaryMonth())
+  const [salaryMonth, setSalaryMonth] = useState(lastSalaryMonth())
   const [dt, setDt] = useState(todayYmd())
   const [grossAmt, setGrossAmt] = useState('')
   const [incentiveAmt, setIncentiveAmt] = useState('0')
@@ -44,10 +73,40 @@ export default function SalaryNew() {
   )
 
   useEffect(() => {
+    if (!isEdit || !paymentSource) return
+    const key = String(paymentSource.salid ?? paymentSource.id ?? editingSalid)
+    if (hydratedRef.current === key) return
+    hydratedRef.current = key
+
+    const ded = parseDeductionBreakdown(paymentSource.remarks, paymentSource.deduction_amt)
+    setEmpid(String(paymentSource.empid ?? paymentSource.employee?.empid ?? ''))
+    setSalaryMonth(paymentSource.salary_month || lastSalaryMonth())
+    setDt(dtToYmd(paymentSource.dt))
+    setGrossAmt(amountStr(paymentSource.gross_amt))
+    setIncentiveAmt(amountStr(paymentSource.incentive_amt))
+    setArrearsAmt(amountStr(paymentSource.arrears_amt))
+    setLwpAmt(amountStr(ded.lwp))
+    setAdvanceDed(amountStr(ded.advance))
+    setOtherDed(amountStr(ded.other))
+    setPayby(
+      paymentSource.payby != null && paymentSource.payby !== ''
+        ? String(paymentSource.payby)
+        : paymentSource.pay_by?.pbid != null
+          ? String(paymentSource.pay_by.pbid)
+          : paymentSource.payBy?.pbid != null
+            ? String(paymentSource.payBy.pbid)
+            : ''
+    )
+    setRefno(paymentSource.refno ?? '')
+    setRemarks(ded.userRemarks || '')
+  }, [isEdit, paymentSource, editingSalid])
+
+  useEffect(() => {
+    if (isEdit) return
     if (!selectedEmployee) return
     const basic = Number(selectedEmployee.monthly_salary) || 0
     if (basic > 0) setGrossAmt(String(basic))
-  }, [selectedEmployee?.empid])
+  }, [selectedEmployee?.empid, isEdit])
 
   useEffect(() => {
     if (paybyList.length && payby === '') {
@@ -90,7 +149,11 @@ export default function SalaryNew() {
       payment_type: 'salary',
     }
     try {
-      await createPayment(payload).unwrap()
+      if (isEdit) {
+        await updatePayment({ salid: Number(editingSalid), ...payload }).unwrap()
+      } else {
+        await createPayment(payload).unwrap()
+      }
       navigate('/salary')
     } catch (err) {
       console.error('Salary payment failed:', err)
@@ -110,7 +173,7 @@ export default function SalaryNew() {
             <ArrowLeft size={16} />
             Back
           </Link>
-          <h1 className="page-title">Pay Salary</h1>
+          <h1 className="page-title">{isEdit ? 'Edit Salary' : 'Pay Salary'}</h1>
         </div>
       </div>
 
@@ -208,7 +271,7 @@ export default function SalaryNew() {
         <div className="salary-form-actions">
           <Link to="/salary" className="btn btn-secondary">Cancel</Link>
           <button type="submit" className="btn btn-primary" disabled={isSaving}>
-            {isSaving ? 'Saving…' : 'Save & Generate Receipt'}
+            {isSaving ? 'Saving…' : isEdit ? 'Update Salary' : 'Save & Generate Receipt'}
           </button>
         </div>
       </form>

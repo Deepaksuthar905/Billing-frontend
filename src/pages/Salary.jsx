@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Download, Plus, Search, UserPlus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Download, Edit, Plus, Search, UserPlus } from 'lucide-react'
 import { useGetSalaryPaymentsQuery } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import { formatSalaryMonth } from '../utils/salaryDeductions'
@@ -22,6 +22,7 @@ function currentMonthRange() {
 }
 
 export default function Salary() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [from, setFrom] = useState(() => currentMonthRange().from)
   const [to, setTo] = useState(() => currentMonthRange().to)
@@ -115,7 +116,7 @@ export default function Salary() {
               <th>Pay Date</th>
               <th>Paid Via</th>
               <th style={{ textAlign: 'right' }}>Net Payable</th>
-              <th className="th-actions">PDF</th>
+              <th className="th-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -135,8 +136,9 @@ export default function Salary() {
               filtered.map((r) => {
                 const emp = r.employee ?? {}
                 const payBy = r.pay_by ?? r.payBy ?? {}
+                const salid = r.salid ?? r.id
                 return (
-                  <tr key={r.salid ?? r.id ?? r.receipt_no}>
+                  <tr key={salid ?? r.receipt_no}>
                     <td className="font-medium">{r.receipt_no ?? '—'}</td>
                     <td>{emp.empname ?? r.empname ?? '—'}</td>
                     <td>{emp.emp_code ?? '—'}</td>
@@ -145,14 +147,29 @@ export default function Salary() {
                     <td>{payBy.name ?? '—'}</td>
                     <td style={{ textAlign: 'right' }}>{formatCurrency(r.net_amt, 2)}</td>
                     <td>
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        aria-label="Download receipt"
-                        onClick={() => setReceiptRow(r)}
-                      >
-                        <Download size={16} />
-                      </button>
+                      <div className="salary-row-actions">
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          aria-label="Edit salary"
+                          title="Edit"
+                          onClick={() =>
+                            navigate(`/salary/${salid}/edit`, { state: { payment: r } })
+                          }
+                          disabled={salid == null}
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          aria-label="Download receipt"
+                          title="PDF"
+                          onClick={() => setReceiptRow(r)}
+                        >
+                          <Download size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

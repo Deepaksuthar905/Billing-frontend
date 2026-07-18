@@ -60,6 +60,12 @@
   color: var(--text-muted, #6b7280);
 }
 
+.salary-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .salary-form-card {
   padding: 1.25rem;
 }

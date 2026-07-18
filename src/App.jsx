@@ -46,6 +46,7 @@ function App() {
         <Route path="expenses/new" element={<ExpenseNew />} />
         <Route path="salary" element={<Salary />} />
         <Route path="salary/new" element={<SalaryNew />} />
+        <Route path="salary/:salid/edit" element={<SalaryNew />} />
         <Route path="reports" element={<Reports />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

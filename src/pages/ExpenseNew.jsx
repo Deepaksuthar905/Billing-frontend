@@ -31,7 +31,7 @@ const emptyLineItem = () => ({
   price: 0,
   discountPct: 0,
   discountAmt: 0,
-  taxPct: 18,
+  taxPct: 0,
   taxAmt: 0,
   amount: 0,
 })
@@ -68,7 +68,7 @@ function lineFromExpense(exp, priceType = PRICE_TYPE_WITH_TAX) {
   const desc = String(exp.description ?? '').trim()
   const payment = round2(Number(exp.payment) || 0)
   const rootGst = Number(exp.gst)
-  const taxPct = rootGst > 0 && rootGst <= 100 ? rootGst : 18
+  const taxPct = rootGst > 0 && rootGst <= 100 ? rootGst : 0
 
   let item = cat
   let description = ''
@@ -250,7 +250,7 @@ export default function ExpenseNew() {
     const invItem = items.find((i) => String(i.id ?? i.item_id) === String(itemId))
     if (!invItem) return
     const price = Number(invItem.rate) || 0
-    const taxPct = Number(invItem.gst) || 18
+    const taxPct = Number(invItem.gst) || 0
     setLineItems((prev) =>
       prev.map((line, i) => {
         if (i !== index) return line
@@ -307,7 +307,7 @@ export default function ExpenseNew() {
               hsnCode: payload.hsncode,
               description: payload.description ?? '',
               price: payload.rate,
-              taxPct: payload.gst || 18,
+              taxPct: payload.gst || 0,
             }
             return recalcLineAmount(newLine, priceType)
           })
