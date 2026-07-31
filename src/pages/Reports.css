@@ -724,3 +724,238 @@
     align-items: flex-start;
   }
 }
+
+/* ── Monthly Report ── */
+.monthly-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.monthly-toolbar-left {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.monthly-month-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.monthly-month-field .form-input {
+  min-width: 160px;
+}
+
+.monthly-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.monthly-empty {
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+}
+
+.monthly-row {
+  cursor: pointer;
+}
+
+.monthly-row:hover {
+  background: var(--bg-muted, #f9fafb);
+}
+
+.monthly-caret {
+  transition: transform 0.15s;
+  color: var(--text-muted, #6b7280);
+}
+
+.monthly-caret--open {
+  transform: rotate(180deg);
+}
+
+.monthly-detail-row > td {
+  background: var(--bg-muted, #f9fafb);
+  padding: 0.75rem 1rem;
+}
+
+.monthly-head-table {
+  max-width: 560px;
+}
+
+.monthly-net--pos {
+  color: #059669;
+  font-weight: 600;
+}
+
+.monthly-net--neg {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.monthly-compare-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.monthly-subheading {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.monthly-change {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.monthly-change--up {
+  color: #059669;
+}
+
+.monthly-change--down {
+  color: #dc2626;
+}
+
+/* ── Graph Report ── */
+.graph-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+}
+
+.graph-months-block {
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.graph-months-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.graph-months-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.graph-months-actions .btn-sm {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.graph-months-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted, #6b7280);
+  padding: 0.35rem 0;
+}
+
+.graph-months-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.graph-month-chip {
+  border: 1px solid var(--border, #d1d5db);
+  background: #fff;
+  color: #374151;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.graph-month-chip:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.graph-month-chip--on {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.graph-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.graph-field .form-input {
+  min-width: 150px;
+}
+
+.graph-field--wide .form-input {
+  min-width: 220px;
+}
+
+.graph-chart-wrap {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 0.5rem;
+}
+
+.graph-total-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg-muted, #f9fafb);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.graph-total-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.graph-total-label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #6b7280);
+}
+
+.graph-total-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-heading, #111827);
+}
+
+.graph-heads-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .graph-heads-layout {
+    grid-template-columns: 1fr;
+  }
+}

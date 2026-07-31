@@ -30,6 +30,8 @@ import {
   buildPortalSlicePayload,
   getB2bPortalSkippedInvoices,
 } from '../utils/gstr1PortalSliceExport'
+import MonthlyReport from './MonthlyReport'
+import GraphReport from './GraphReport'
 import './Reports.css'
 
 /** Same outward-supply row shape as GSTR-1 table */
@@ -163,6 +165,8 @@ function buildGstRateRows(data) {
 }
 
 const reportCategories = [
+  { id: 'monthly', title: 'Monthly Report', desc: 'Month-wise invoices, expenses and comparison', icon: Calendar },
+  { id: 'graph', title: 'Graph Report', desc: 'Charts from monthly report data', icon: BarChart3 },
   { id: 'purchase', title: 'Expenses Report', desc: 'Purchase orders and vendor summary', icon: BarChart3 },
   { id: 'gst', title: 'GST Reports', desc: 'GSTR-1, 3B, purchase register, rate-wise tax', icon: FileText },
   { id: 'profit', title: 'Profit & Loss', desc: 'Revenue, expenses and profit', icon: BarChart3 },
@@ -845,6 +849,7 @@ export default function Reports() {
               <option value="custom">Custom range</option>
             </select>
           </div>
+          {activeReportId !== 'monthly' && activeReportId !== 'graph' && (
           <button
             type="button"
             className="btn btn-secondary"
@@ -869,6 +874,7 @@ export default function Reports() {
               ? 'Loading…'
               : 'Export'}
           </button>
+          )}
           {activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub) && (
             <button
               type="button"
@@ -2081,6 +2087,10 @@ export default function Reports() {
               </div>
             </div>
           )}
+
+          {activeReportId === 'monthly' && <MonthlyReport />}
+
+          {activeReportId === 'graph' && <GraphReport />}
 
           {activeReportId === 'profit' && (
             <div className="card">

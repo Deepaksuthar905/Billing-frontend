@@ -69,7 +69,7 @@ export const billingApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger', 'GeneralEntry', 'Employee', 'SalaryPayment'],
+  tagTypes: ['Dashboard', 'Invoice', 'PurchaseOrder', 'Vendor', 'Customer', 'Item', 'Expense', 'ExpenseHead', 'Ledger', 'GeneralEntry', 'Employee', 'SalaryPayment', 'MonthlyReport'],
   keepUnusedDataFor: 5 * 60, // 5 min cache – same request dubara nahi bhelegi
   endpoints: (builder) => ({
     login: builder.mutation({
@@ -424,6 +424,29 @@ export const billingApi = createApi({
         'Dashboard',
       ],
     }),
+
+    // Monthly reports (stored snapshots in monthly_reports table)
+    getMonthlyReports: builder.query({
+      query: ({ year } = {}) => {
+        const params = new URLSearchParams()
+        if (year) params.set('year', String(year))
+        const qs = params.toString()
+        return { url: qs ? `/monthly-reports?${qs}` : '/monthly-reports' }
+      },
+      transformResponse: normalizeList,
+      providesTags: ['MonthlyReport'],
+    }),
+    generateMonthlyReport: builder.mutation({
+      query: (body) => ({ url: '/monthly-reports/generate', method: 'POST', body }),
+      invalidatesTags: ['MonthlyReport'],
+    }),
+    compareMonthlyReports: builder.query({
+      query: ({ month1, month2 }) => ({
+        url: `/monthly-reports/compare?month1=${encodeURIComponent(month1)}&month2=${encodeURIComponent(month2)}`,
+      }),
+      transformResponse: (r) => r?.data ?? null,
+      providesTags: ['MonthlyReport'],
+    }),
   }),
 })
 
@@ -469,4 +492,7 @@ export const {
   useCreateSalaryPaymentMutation,
   useGetSalaryPaymentByIdQuery,
   useUpdateSalaryPaymentMutation,
+  useGetMonthlyReportsQuery,
+  useGenerateMonthlyReportMutation,
+  useCompareMonthlyReportsQuery,
 } = billingApi
