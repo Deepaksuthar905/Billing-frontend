@@ -138,6 +138,7 @@ export default function PurchaseNew() {
     mobno: '',
     city: '',
     state: '',
+    gst_no: '',
     gst_reg: true,
     same_state: true,
   })
@@ -305,6 +306,7 @@ export default function PurchaseNew() {
       mobno: '',
       city: '',
       state: '',
+      gst_no: '',
       gst_reg: true,
       same_state: true,
     })
@@ -318,6 +320,7 @@ export default function PurchaseNew() {
       mobno: '',
       city: '',
       state: '',
+      gst_no: '',
       gst_reg: true,
       same_state: true,
     })
@@ -340,12 +343,17 @@ export default function PurchaseNew() {
       alert('Please enter mobile number.')
       return
     }
+    if (newPartyForm.gst_reg && !newPartyForm.gst_no.trim()) {
+      alert('Please enter GST number for GST registered party.')
+      return
+    }
     try {
       const res = await createCustomer({
         partyname: newPartyForm.partyname.trim(),
         mobno: newPartyForm.mobno.trim(),
         city: newPartyForm.city.trim(),
         state: newPartyForm.state.trim(),
+        gst_no: newPartyForm.gst_no.trim() || undefined,
         gst_reg: newPartyForm.gst_reg ? 1 : 0,
         same_state: newPartyForm.same_state ? 1 : 0,
         prtytyp: 1,
@@ -893,6 +901,17 @@ export default function PurchaseNew() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="form-group">
+                <label>GST No{newPartyForm.gst_reg ? <span className="required"> *</span> : null}</label>
+                <input
+                  type="text"
+                  value={newPartyForm.gst_no}
+                  onChange={(e) => setNewPartyForm((p) => ({ ...p, gst_no: e.target.value.toUpperCase() }))}
+                  className="form-input"
+                  placeholder="e.g. 08DTGPS6229M2ZW"
+                  maxLength={15}
+                />
               </div>
               <div className="form-group form-row-check">
                 <label className="form-check">

@@ -7,6 +7,7 @@ import {
   useCreateExpenseMutation,
   useUpdateExpenseMutation,
   useGetExpenseByIdQuery,
+  useGetExpensesQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
   useGetItemsQuery,
@@ -151,6 +152,9 @@ export default function ExpenseNew() {
   // API hooks
   const { data: headsData } = useGetExpenseHeadsQuery(undefined, { refetchOnMountOrArgChange: 120 })
   const expenseHeads = headsData?.data ?? []
+
+  const { data: expensesListData } = useGetExpensesQuery(undefined, { refetchOnMountOrArgChange: 120 })
+  const allExpenses = expensesListData?.data ?? []
 
   const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
@@ -321,6 +325,81 @@ export default function ExpenseNew() {
   }
 
   const addRow = () => setLineItems((prev) => [...prev, emptyLineItem()])
+
+  /** When category changes on a new expense, fill line + last used party/payby. */
+  const handleExpHeadChange = (value) => {
+    if (value === '__add__') {
+      setShowCatModal(true)
+      return
+    }
+    setExpHeadId(value)
+    if (!value || editingExid != null) return
+
+    const head = expenseHeads.find((h) => String(h.exhid ?? h.id) === String(value))
+    if (!head) return
+
+    // Latest expense under this head (fallback if heads API has no party yet)
+    const latestExp = [...allExpenses]
+      .filter((e) => String(e.exhid) === String(value))
+      .sort((a, b) => {
+        const da = String(a.dt ?? '')
+        const db = String(b.dt ?? '')
+        if (da !== db) return db.localeCompare(da)
+        return (Number(b.exid) || 0) - (Number(a.exid) || 0)
+      })[0]
+
+    const payment = round2(
+      Number(head.last_payment) > 0
+        ? head.last_payment
+        : Number(latestExp?.payment) > 0
+          ? latestExp.payment
+          : Number(head.payment) || 0
+    )
+
+    // Parse last expense description ("Item - detail") into item + description
+    let itemName = String(head.name ?? '').trim()
+    let description = ''
+    const rawDesc = String(latestExp?.description ?? '').trim()
+    if (rawDesc) {
+      const parts = rawDesc
+        .split(' - ')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (parts.length <= 1) {
+        itemName = parts[0] || itemName
+      } else {
+        itemName = parts[0] || itemName
+        description = parts.slice(1).join(' - ')
+      }
+    }
+
+    setLineItems((prev) => {
+      const first = prev[0] ?? emptyLineItem()
+      const filled = recalcLineAmount(
+        {
+          ...first,
+          item: itemName || first.item,
+          description,
+          qty: Number(first.qty) > 0 ? Number(first.qty) : 1,
+          price: payment,
+          taxPct: Number(first.taxPct) || 0,
+        },
+        priceType
+      )
+      return [filled, ...prev.slice(1)]
+    })
+
+    const partyId = head.party ?? latestExp?.party ?? latestExp?.party_relation?.pid
+    if (partyId != null && partyId !== '') {
+      setPid(String(partyId))
+    }
+
+    const paybyId = head.payby ?? latestExp?.payby
+    if (paybyId != null && paybyId !== '') {
+      setPayby(String(paybyId))
+    }
+  }
+
   const removeRow = (index) => {
     if (lineItems.length <= 1) return
     setLineItems((prev) => prev.filter((_, i) => i !== index))
@@ -515,13 +594,7 @@ export default function ExpenseNew() {
               <div className="exp-cat-select-wrap">
                 <select
                   value={expHeadId}
-                  onChange={(e) => {
-                    if (e.target.value === '__add__') {
-                      setShowCatModal(true)
-                    } else {
-                      setExpHeadId(e.target.value)
-                    }
-                  }}
+                  onChange={(e) => handleExpHeadChange(e.target.value)}
                   className="form-input"
                   required
                 >

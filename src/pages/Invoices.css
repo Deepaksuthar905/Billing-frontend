@@ -175,6 +175,13 @@
   outline: none;
 }
 
+.inv-date-apply-btn {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .filter-group {
   display: flex;
   align-items: center;

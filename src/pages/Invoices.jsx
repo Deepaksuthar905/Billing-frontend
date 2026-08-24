@@ -35,6 +35,10 @@ export default function Invoices() {
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  /** Draft dates (user editing) — API pe apply nahi hote jab tak Submit na dabaye */
+  const [draftFrom, setDraftFrom] = useState('')
+  const [draftTo, setDraftTo] = useState('')
+  /** Applied dates — list/API filter */
   const [filterFrom, setFilterFrom] = useState('')
   const [filterTo, setFilterTo] = useState('')
   const [invNoFilter, setInvNoFilter] = useState('')
@@ -53,6 +57,31 @@ export default function Invoices() {
 
   const rangeOkForApi =
     !filterFrom || !filterTo || !exceedsOneMonthRange(filterFrom, filterTo)
+
+  const applyDateFilter = () => {
+    if (draftFrom && draftTo) {
+      if (draftFrom > draftTo) {
+        alert('From date cannot be after To date.')
+        return
+      }
+      if (exceedsOneMonthRange(draftFrom, draftTo)) {
+        alert('Max 1 month range to fetch invoices.')
+        return
+      }
+    } else if ((draftFrom && !draftTo) || (!draftFrom && draftTo)) {
+      alert('Please select both From and To dates.')
+      return
+    }
+    setFilterFrom(draftFrom)
+    setFilterTo(draftTo)
+  }
+
+  const clearDateFilter = () => {
+    setDraftFrom('')
+    setDraftTo('')
+    setFilterFrom('')
+    setFilterTo('')
+  }
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(
     {
@@ -331,38 +360,32 @@ export default function Invoices() {
             <Calendar size={15} className="filter-field-icon" />
             <input
               type="date"
-              value={filterFrom}
-              onChange={(e) => {
-                const v = e.target.value
-                setFilterFrom(v)
-                if (v && filterTo && exceedsOneMonthRange(v, filterTo)) {
-                  alert('Max 1 month range to fetch invoices.')
-                  setFilterTo('')
-                }
-              }}
+              value={draftFrom}
+              onChange={(e) => setDraftFrom(e.target.value)}
               className="input-sm"
-              title="From date (max 1 month with To)"
+              title="From date"
             />
             <span className="inv-date-sep">—</span>
             <input
               type="date"
-              value={filterTo}
-              onChange={(e) => {
-                const v = e.target.value
-                if (filterFrom && v && exceedsOneMonthRange(filterFrom, v)) {
-                  alert('Max 1 month range to fetch invoices.')
-                  return
-                }
-                setFilterTo(v)
-              }}
+              value={draftTo}
+              onChange={(e) => setDraftTo(e.target.value)}
               className="input-sm"
-              title="To date (max 1 month from From)"
+              title="To date"
             />
-            {(filterFrom || filterTo) && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm inv-date-apply-btn"
+              onClick={applyDateFilter}
+              title="Apply date filter (max 1 month)"
+            >
+              Submit
+            </button>
+            {(draftFrom || draftTo || filterFrom || filterTo) && (
               <button
                 type="button"
                 className="btn-clear-filter"
-                onClick={() => { setFilterFrom(''); setFilterTo('') }}
+                onClick={clearDateFilter}
                 title="Clear dates"
               >
                 ✕

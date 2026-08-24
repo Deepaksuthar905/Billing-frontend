@@ -35,7 +35,7 @@ import GraphReport from './GraphReport'
 import './Reports.css'
 
 /** Same outward-supply row shape as GSTR-1 table */
-function mapInvoiceToGstr1Row(inv) {
+function mapInvoiceToGstr1Row(inv, partyByPid) {
   const cgst = Number(inv.cgst) || 0
   const sgst = Number(inv.sgst) || 0
   const igst = Number(inv.igst) || 0
@@ -44,9 +44,24 @@ function mapInvoiceToGstr1Row(inv) {
   const taxableValue = invoiceValue - totalTax
   const safeTaxableValue = taxableValue > 0 ? taxableValue : invoiceValue
   const taxRate = safeTaxableValue > 0 ? (totalTax / safeTaxableValue) * 100 : 0
+
+  const pid = inv.pid ?? inv.customer_id ?? inv.party_id
+  const party = pid != null && partyByPid ? partyByPid.get(String(pid)) : null
+  const fromInvoice = String(
+    inv.gstin ?? inv.gst_no ?? inv.gstin_no ?? inv.customer_gstin ?? inv.buyer_gstin ?? ''
+  ).trim()
+  const fromParty = String(party?.gst_no ?? party?.gstin ?? '').trim()
+  const gstin = fromInvoice || fromParty || ''
+
   return {
-    gstin: inv.gstin ?? inv.gst_no ?? inv.gstin_no,
-    partyName: inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name,
+    gstin,
+    partyName:
+      inv.customer ??
+      inv.customer_name ??
+      inv.partyname ??
+      inv.billing_name ??
+      party?.partyname ??
+      party?.name,
     invNo: inv.inv_no ?? inv.id,
     date: inv.dt ?? inv.date,
     value: invoiceValue,
@@ -76,6 +91,11 @@ const getDisplayValue = (value) => {
   if (value == null) return '0'
   if (typeof value === 'string' && value.trim() === '') return '0'
   return value
+}
+
+const getGstinDisplay = (value) => {
+  const g = String(value ?? '').trim()
+  return g || '—'
 }
 
 /** YYYY-MM-DD from API date (avoids timezone shifting whole-day compares). */
@@ -355,12 +375,12 @@ export default function Reports() {
         return d >= fromDt && d <= toDt
       })
     : invoices
-  const gstr1Rows = filteredInvoices.map(mapInvoiceToGstr1Row)
+  const gstr1Rows = filteredInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
 
   const b2bInvoices = filteredInvoices.filter((inv) => invoiceIsB2BByParty(inv, partyByPid))
   const b2cInvoices = filteredInvoices.filter((inv) => !invoiceIsB2BByParty(inv, partyByPid))
-  const b2bRows = b2bInvoices.map(mapInvoiceToGstr1Row)
-  const b2cRows = b2cInvoices.map(mapInvoiceToGstr1Row)
+  const b2bRows = b2bInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
+  const b2cRows = b2cInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
   const b2bHsnRows = aggregateHsnRows(b2bInvoices)
   const b2cHsnRows = aggregateHsnRows(b2cInvoices)
   const b2bHsnTotals = b2bHsnRows.reduce(
@@ -1135,7 +1155,7 @@ export default function Reports() {
                     {gstr1Rows.map((row, i) => (
                       <tr key={i}>
                         <td>{i + 1}</td>
-                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getGstinDisplay(row.gstin)}</td>
                         <td>{getDisplayValue(row.partyName)}</td>
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
@@ -1238,7 +1258,7 @@ export default function Reports() {
                     {b2bRows.map((row, i) => (
                       <tr key={i}>
                         <td>{i + 1}</td>
-                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getGstinDisplay(row.gstin)}</td>
                         <td>{getDisplayValue(row.partyName)}</td>
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
@@ -1325,7 +1345,7 @@ export default function Reports() {
                     {b2cRows.map((row, i) => (
                       <tr key={i}>
                         <td>{i + 1}</td>
-                        <td>{getDisplayValue(row.gstin)}</td>
+                        <td>{getGstinDisplay(row.gstin)}</td>
                         <td>{getDisplayValue(row.partyName)}</td>
                         <td>{getDisplayValue(row.invNo)}</td>
                         <td>{getDisplayValue(row.date)}</td>
