@@ -28,8 +28,13 @@
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
   margin: 0;
+}
+
+body {
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
@@ -39,7 +44,7 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
 }
 
 h1, h2, h3 {

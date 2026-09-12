@@ -41,6 +41,10 @@ export function exportCurrentReport(ctx) {
     b2cRows,
     b2bHsnRows,
     b2cHsnRows,
+    allInvFrom,
+    allInvTo,
+    allInvRows,
+    allInvSort,
     docSummaryFrom,
     docSummaryTo,
     documentIssuedSummary,
@@ -64,6 +68,7 @@ export function exportCurrentReport(ctx) {
     ledgerPayByName,
     ledgerPayByDetail,
     ledgerRows,
+    showLedgerRunningTotals,
     ledgerSummary,
     expRptFrom,
     expRptTo,
@@ -167,6 +172,19 @@ export function exportCurrentReport(ctx) {
             ['Detail', ledgerPayByDetail ?? '—'],
           ]
         : []
+    const ledgerHeader = showLedgerRunningTotals
+      ? [
+          'Date',
+          'Particulars',
+          'Voucher Type',
+          'Voucher No',
+          'Debit (₹)',
+          'Total Debit (₹)',
+          'Credit (₹)',
+          'Total Credit (₹)',
+          'Balance (₹)',
+        ]
+      : ['Date', 'Particulars', 'Voucher Type', 'Voucher No', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)']
     sheets.push({
       name: 'Ledger',
       rows: [
@@ -174,16 +192,27 @@ export function exportCurrentReport(ctx) {
         ['Period', `${ledgerFrom ?? ''} to ${ledgerTo ?? ''}`],
         ...ledgerPayByRows,
         [],
-        ['Date', 'Particulars', 'Voucher Type', 'Voucher No', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)'],
-        ...(ledgerRows || []).map((row) => [
-          row.date ?? row.dt ?? '',
-          row.particulars ?? row.narration ?? row.description ?? '',
-          row.voucher_type ?? row.vch_type ?? row.type ?? '',
-          row.voucher_no ?? row.vch_no ?? row.ref_no ?? '',
-          row.debit ?? row.dr ?? 0,
-          row.credit ?? row.cr ?? 0,
-          row.balance ?? row.bal ?? '',
-        ]),
+        ledgerHeader,
+        ...(ledgerRows || []).map((row) => {
+          const debit = row.debit ?? row.dr ?? 0
+          const credit = row.credit ?? row.cr ?? 0
+          const base = [
+            row.date ?? row.dt ?? '',
+            row.particulars ?? row.narration ?? row.description ?? '',
+            row.voucher_type ?? row.vch_type ?? row.type ?? '',
+            row.voucher_no ?? row.vch_no ?? row.ref_no ?? '',
+            debit,
+          ]
+          if (showLedgerRunningTotals) {
+            base.push(row.runningDebit ?? '')
+          }
+          base.push(credit)
+          if (showLedgerRunningTotals) {
+            base.push(row.runningCredit ?? '')
+          }
+          base.push(row.balance ?? row.bal ?? '')
+          return base
+        }),
         ...(ledgerSummary
           ? [
               [],
@@ -286,6 +315,45 @@ export function exportCurrentReport(ctx) {
       ],
     })
     baseName = `B2B_${b2bFrom ?? ''}_${b2bTo ?? ''}`
+  } else if (activeReportId === 'gst' && activeGstSub === 'all-inv') {
+    const sortLabel = allInvSort === 'inv-date' ? 'Invoice - Date' : 'Date - Invoice'
+    sheets.push({
+      name: 'All Invoices',
+      rows: [
+        ['Date range', `${allInvFrom ?? gstr1From ?? ''} to ${allInvTo ?? gstr1To ?? ''}`],
+        ['Sort', sortLabel],
+        [],
+        [
+          'Sno.',
+          'GSTIN',
+          'Party Name',
+          'Invoice no.',
+          'Date',
+          'Value',
+          'Tax Rate %',
+          'Taxable Value',
+          'Integrated Tax',
+          'Central Tax',
+          'State Tax',
+          'Place of Supply',
+        ],
+        ...(allInvRows || []).map((row, i) => [
+          i + 1,
+          row.gstin ?? '',
+          row.partyName ?? '',
+          row.invNo ?? '',
+          row.date ?? '',
+          row.value ?? 0,
+          Math.round(row.taxRate ?? 0),
+          row.taxableValue ?? 0,
+          row.integratedTaxDisplay ?? 0,
+          row.centralTaxDisplay ?? 0,
+          row.stateTaxDisplay ?? 0,
+          row.placeOfSupply ?? '',
+        ]),
+      ],
+    })
+    baseName = `All_Invoices_${allInvFrom ?? gstr1From ?? ''}_${allInvTo ?? gstr1To ?? ''}`
   } else if (activeReportId === 'gst' && activeGstSub === 'b2c') {
     const b2cSorted = [...(b2cRows || [])].sort((a, b) =>
       String(a.placeOfSupply ?? '').localeCompare(String(b.placeOfSupply ?? ''), 'en-IN')

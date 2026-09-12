@@ -46,13 +46,23 @@ function dateRangePresetToFromTo(preset) {
 }
 
 function compareExpenses(a, b, sortBy) {
-  if (sortBy === 'inv-asc' || sortBy === 'inv-desc') {
-    const cmp = a.receiptNoStr.localeCompare(b.receiptNoStr, undefined, {
+  const invCmp = () =>
+    a.receiptNoStr.localeCompare(b.receiptNoStr, undefined, {
       numeric: true,
       sensitivity: 'base',
     })
+
+  if (sortBy === 'inv-asc' || sortBy === 'inv-desc') {
+    const cmp = invCmp()
     return sortBy === 'inv-asc' ? cmp : -cmp
   }
+
+  if (sortBy === 'date-inv-asc') {
+    const diff = a.rawDate - b.rawDate
+    if (diff !== 0) return diff
+    return invCmp()
+  }
+
   const diff = a.rawDate - b.rawDate
   if (sortBy === 'date-asc') return diff
   return -diff
@@ -64,10 +74,12 @@ export default function Expenses() {
   const [rightSearch, setRightSearch] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
 
-  const [datePreset, setDatePreset] = useState('all')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [datePreset, setDatePreset] = useState('last-month')
+  const [from, setFrom] = useState(() => dateRangePresetToFromTo('last-month').from)
+  const [to, setTo] = useState(() => dateRangePresetToFromTo('last-month').to)
   const [sortBy, setSortBy] = useState('date-desc')
+  /** Show cumulative Total column after Amount (ledger-style) */
+  const [showRunningTotal, setShowRunningTotal] = useState(false)
 
   const [deleteExpense, { isLoading: isDeleting }] = useDeleteExpenseMutation()
 
@@ -161,6 +173,14 @@ export default function Expenses() {
       .sort((a, b) => compareExpenses(a, b, sortBy))
   }, [visibleExpenses, rightSearch, sortBy])
 
+  const expensesWithRunning = useMemo(() => {
+    let running = 0
+    return filteredExpenses.map((exp) => {
+      running += Number(exp.payment) || 0
+      return { ...exp, runningTotal: running }
+    })
+  }, [filteredExpenses])
+
   const panelTotal = selectedHeadId
     ? headTotals[String(selectedHeadId)] || 0
     : dateFilteredExpenses.reduce((s, e) => s + (Number(e.payment) || 0), 0)
@@ -194,6 +214,18 @@ export default function Expenses() {
               <span>CATEGORY</span>
               <span>AMOUNT</span>
             </div>
+            <button
+              type="button"
+              className={`exp-category-item ${selectedHeadId == null ? 'exp-category-item--active' : ''}`}
+              onClick={() => setSelectedHeadId(null)}
+            >
+              <span className="exp-cat-name">All</span>
+              <span className="exp-cat-amount">
+                {Math.round(
+                  dateFilteredExpenses.reduce((s, e) => s + (Number(e.payment) || 0), 0)
+                ).toLocaleString('en-IN')}
+              </span>
+            </button>
             {filteredHeads.map((head) => (
               <button
                 key={head.exhid ?? head.id}
@@ -281,6 +313,7 @@ export default function Expenses() {
                   <option value="date-desc">DESC by date</option>
                   <option value="inv-asc">ASC by inv</option>
                   <option value="inv-desc">DESC by inv</option>
+                  <option value="date-inv-asc">ASC by date &amp; inv</option>
                 </select>
               </div>
 
@@ -295,6 +328,14 @@ export default function Expenses() {
                 />
               </div>
             </div>
+            <label className="exp-running-toggle">
+              <input
+                type="checkbox"
+                checked={showRunningTotal}
+                onChange={(e) => setShowRunningTotal(e.target.checked)}
+              />
+              <span>Show Total</span>
+            </label>
           </div>
 
           {expensesLoading && <div className="exp-loading">Loading...</div>}
@@ -309,18 +350,19 @@ export default function Expenses() {
                   <th>PARTY</th>
                   <th>PAY BY</th>
                   <th>AMOUNT</th>
+                  {showRunningTotal && <th className="text-right">TOTAL</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredExpenses.length === 0 ? (
+                {expensesWithRunning.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="exp-no-data">
+                    <td colSpan={showRunningTotal ? 8 : 7} className="exp-no-data">
                       {expensesLoading ? 'Loading...' : 'No expenses found.'}
                     </td>
                   </tr>
                 ) : (
-                  filteredExpenses.map((exp) => (
+                  expensesWithRunning.map((exp) => (
                     <tr key={exp.exid}>
                       <td>{formatDate(exp.dt)}</td>
                       <td className="font-medium">{exp.receipt_no ?? exp.exid}</td>
@@ -328,6 +370,11 @@ export default function Expenses() {
                       <td>{exp.party_relation?.partyname ?? '—'}</td>
                       <td>{exp.payby != null ? (paybyNameMap.get(String(exp.payby)) ?? '—') : '—'}</td>
                       <td>{formatCurrency(Number(exp.payment) || 0)}</td>
+                      {showRunningTotal && (
+                        <td className="text-right exp-running-total">
+                          {formatCurrency(exp.runningTotal)}
+                        </td>
+                      )}
                       <td>
                         <div className="action-btns">
                           <Link

@@ -224,6 +224,30 @@
   max-width: 280px;
 }
 
+.exp-running-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  font-size: 0.85rem;
+  color: var(--text, #374151);
+  cursor: pointer;
+  user-select: none;
+}
+
+.exp-running-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary, #2563eb);
+  cursor: pointer;
+}
+
+.exp-running-total {
+  font-weight: 600;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+
 .expenses-right .table-wrap {
   flex: 1;
   overflow-y: auto;

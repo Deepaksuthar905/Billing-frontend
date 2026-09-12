@@ -39,19 +39,37 @@ const emptyLineItem = () => ({
 })
 
 function mapApiItemToLine(line) {
+  const qty = Number(line.qty ?? line.quantity) || 1
+  // Backend invoice_item: rate + payment (sync); create API may send price + amount
+  const payment = Number(line.payment ?? line.amount ?? 0) || 0
+  let price = Number(line.price ?? line.rate ?? line.unit_price) || 0
+  if (price <= 0 && payment > 0) {
+    price = qty > 0 ? round2(payment / qty) : payment
+  }
+  const taxPct = Number(line.tax_pct ?? line.gst ?? line.gst_pct) || IGST_RATE
+  let taxAmt = Number(line.tax_amt ?? line.gst_amt) || 0
+  let amount = Number(line.amount ?? line.payment) || 0
+  if (amount <= 0 && price > 0) {
+    amount = round2(qty * price)
+  }
+  if (taxAmt <= 0 && amount > 0 && taxPct > 0) {
+    taxAmt = round2((amount * taxPct) / (100 + taxPct))
+  }
+
   return {
     itemId: line.item_id != null && line.item_id !== '' ? String(line.item_id) : '',
     item: line.item ?? line.item_name ?? '',
-    hsnCode: String(line.hsn_code ?? line.hsncode ?? ''),
+    hsnCode: String(line.hsn_code ?? line.hsncode ?? line.hsnocde ?? ''),
     description: line.description ?? '',
-    qty: Number(line.qty) || 1,
+    qty,
     unit: line.unit ?? 'NONE',
-    price: Number(line.price) || 0,
+    price,
     discountPct: Number(line.discount_pct) || 0,
     discountAmt: Number(line.discount_amt) || 0,
-    taxPct: Number(line.tax_pct ?? line.gst) || IGST_RATE,
-    taxAmt: Number(line.tax_amt) || 0,
-    amount: Number(line.amount) || 0,
+    taxPct,
+    taxAmt,
+    amount,
+    withWithout: Number(line.with_without) === 1 ? 1 : 0,
   }
 }
 
@@ -200,6 +218,9 @@ export default function InvoiceNew() {
 
     const rawItems = Array.isArray(inv.items) ? inv.items : Array.isArray(inv.line_items) ? inv.line_items : []
     if (rawItems.length > 0) {
+      const anyWithTax = rawItems.some((r) => Number(r.with_without) === 1)
+      if (anyWithTax) setPriceType(PRICE_TYPE_WITH_TAX)
+
       const mapped = rawItems.map(mapApiItemToLine)
       const sumLines = mapped.reduce((s, l) => s + (Number(l.amount) || 0), 0)
       const pay = Number(inv.payment ?? inv.amount ?? inv.paynow) || 0

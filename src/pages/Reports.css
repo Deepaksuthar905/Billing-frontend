@@ -536,6 +536,36 @@
   margin-top: 0.5rem;
 }
 
+.ledger-running-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.85rem;
+  color: var(--text, #374151);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ledger-running-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary, #2563eb);
+  cursor: pointer;
+}
+
+.ledger-running-debit {
+  font-weight: 600;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.ledger-running-credit {
+  font-weight: 600;
+  color: #047857;
+  white-space: nowrap;
+}
+
 .ledger-table {
   width: 100%;
   border-collapse: collapse;

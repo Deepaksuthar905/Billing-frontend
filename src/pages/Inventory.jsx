@@ -17,6 +17,7 @@ const initialForm = {
   with_without: 1,
   gst: '',
   gst_amt: '',
+  sales: 0,
 }
 
 function computeSummary(items) {
@@ -77,6 +78,7 @@ export default function Inventory() {
       with_without: item.with_without != null ? (item.with_without === 1 || item.with_without === true ? 1 : 0) : 1,
       gst: item.gst ?? '',
       gst_amt: item.gst_amt ?? '',
+      sales: item.sales != null ? (item.sales === 1 || item.sales === true ? 1 : 0) : 0,
     })
     setModalOpen(true)
   }
@@ -97,6 +99,7 @@ export default function Inventory() {
       with_without: Number(form.with_without) || 0,
       gst: Number(form.gst) || 0,
       gst_amt: Number(form.gst_amt) || 0,
+      sales: Number(form.sales) === 1 ? 1 : 0,
     }
     try {
       if (editingItem) {
@@ -297,6 +300,17 @@ export default function Inventory() {
                   step="0.01"
                   className="form-input"
                 />
+              </div>
+              <div className="form-group form-row-check">
+                <label className="form-check">
+                  <input
+                    type="checkbox"
+                    name="sales"
+                    checked={form.sales === 1}
+                    onChange={handleChange}
+                  />
+                  <span>Selling item</span>
+                </label>
               </div>
               <div className="form-actions">
                 <button type="button" className="btn btn-secondary" onClick={handleClose}>

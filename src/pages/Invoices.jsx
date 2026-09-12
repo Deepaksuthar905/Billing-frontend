@@ -92,11 +92,12 @@ export default function Invoices() {
     { refetchOnMountOrArgChange: 120 }
   )
 
-  const invoices = (isError || !data?.data ? [] : data.data)
+  const invoicesSorted = (isError || !data?.data ? [] : data.data)
     .map((inv) => ({
       ...inv,
       rawDate: new Date(inv.dt ?? inv.date ?? 0),
       invNoStr: String(inv.inv_no ?? inv.invoice_no ?? inv.id ?? ''),
+      amountNum: Number(inv.payment ?? inv.amount) || 0,
       amountFormatted: typeof inv.payment === 'number' ? formatCurrency(inv.payment) : (inv.amount != null ? formatCurrency(inv.amount) : '—'),
       dateFormatted: formatDate(inv.dt ?? inv.date),
       customerName: inv.customer ?? inv.customer_name ?? inv.partyname ?? '—',
@@ -110,6 +111,13 @@ export default function Invoices() {
       return true
     })
     .sort((a, b) => compareInvoices(a, b, sortBy))
+
+  // Ledger-style: cumulative amount of this row + all rows above (current sort order)
+  let runningAmt = 0
+  const invoices = invoicesSorted.map((inv) => {
+    runningAmt += inv.amountNum
+    return { ...inv, runningTotal: runningAmt, runningTotalFormatted: formatCurrency(runningAmt) }
+  })
 
   const allVisibleSelected =
     invoices.length > 0 && invoices.every((inv) => selectedIds.has(inv.id))
@@ -434,6 +442,7 @@ export default function Invoices() {
                 <th>Date</th>
                 <th>Customer</th>
                 <th>Amount</th>
+                <th className="text-right">Running Total</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -441,7 +450,7 @@ export default function Invoices() {
             <tbody>
               {invoices.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted">
+                  <td colSpan={8} className="text-center text-muted">
                     No invoices found. <Link to="/invoices/new">Create one</Link>.
                   </td>
                 </tr>
@@ -461,6 +470,7 @@ export default function Invoices() {
                   <td>{inv.dateFormatted}</td>
                   <td>{inv.customerName}</td>
                   <td>{inv.amountFormatted}</td>
+                  <td className="text-right inv-running-total">{inv.runningTotalFormatted}</td>
                   <td className="inv-status-cell">
                     <span className={`badge badge--${inv.statusClass}`}>
                       {inv.statusDisplay}

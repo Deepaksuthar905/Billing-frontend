@@ -77,9 +77,11 @@ function mapInvoiceToGstr1Row(inv, partyByPid) {
   }
 }
 
-const GST_SUBS_WITH_INVOICES = ['gstr1', 'b2b', 'b2c', 'b2b-hsn', 'b2c-hsn', 'doc-summary']
-/** B2B/B2C split needs `/customers` (party gst_no + gst_reg). */
+const GST_SUBS_WITH_INVOICES = ['gstr1', 'b2b', 'b2c', 'b2b-hsn', 'b2c-hsn', 'doc-summary', 'all-inv']
+/** B2B/B2C split uses invoice.gstno from list API (party still loaded for GSTIN display). */
 const GST_SUBS_NEED_PARTY_FOR_B2 = ['b2b', 'b2c', 'b2b-hsn', 'b2c-hsn']
+/** Any GST sub that should load party master (for GSTIN on rows). */
+const GST_SUBS_NEED_PARTY = [...GST_SUBS_NEED_PARTY_FOR_B2, 'all-inv']
 
 /** GST portal–style JSON download (NIC Returns JSON shape). */
 const GST_SUBS_PORTAL_JSON = ['b2b', 'b2c', 'b2b-hsn', 'b2c-hsn', 'doc-summary']
@@ -200,6 +202,7 @@ const gstSubOptions = [
   { id: 'b2c', title: 'B2C' },
   { id: 'b2b-hsn', title: 'B2B HSN' },
   { id: 'b2c-hsn', title: 'B2C HSN' },
+  { id: 'all-inv', title: 'All Invoices' },
   { id: 'doc-summary', title: 'Documents issued' },
   { id: 'gstr3b', title: 'GSTR-3B' },
   { id: 'purchase-reg', title: 'Purchase register' },
@@ -257,6 +260,10 @@ export default function Reports() {
   const [ledgerAppliedPbid, setLedgerAppliedPbid] = useState(undefined)
   const [isExportingPortalJson, setIsExportingPortalJson] = useState(false)
   const [isExportingFullGstr1Json, setIsExportingFullGstr1Json] = useState(false)
+  /** All Invoices report: sort first by date, then invoice (default). */
+  const [allInvSort, setAllInvSort] = useState('date-inv')
+  /** Ledger: show cumulative Total Debit / Total Credit columns */
+  const [showLedgerRunningTotals, setShowLedgerRunningTotals] = useState(false)
 
   const handleHeaderDateRangeChange = (preset) => {
     setDateRange(preset)
@@ -319,7 +326,7 @@ export default function Reports() {
   )
 
   const { data: customersData, isLoading: customersForB2Loading } = useGetCustomersQuery(undefined, {
-    skip: !(activeReportId === 'gst' && GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub)),
+    skip: !(activeReportId === 'gst' && GST_SUBS_NEED_PARTY.includes(activeGstSub)),
   })
 
   const { data: vendorData } = useGetCustomersQuery(
@@ -339,6 +346,9 @@ export default function Reports() {
   const gstB2SplitLoading =
     gstInvoicesLoading ||
     (GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) && customersForB2Loading)
+
+  const allInvLoading =
+    gstInvoicesLoading || (activeGstSub === 'all-inv' && customersForB2Loading)
 
   const { data: gstr3bInvoicesData, isLoading: gstr3bInvoicesLoading } = useGetInvoicesQuery(
     { from: gstr3bFrom, to: gstr3bTo },
@@ -381,6 +391,42 @@ export default function Reports() {
   const b2cInvoices = filteredInvoices.filter((inv) => !invoiceIsB2BByParty(inv, partyByPid))
   const b2bRows = b2bInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
   const b2cRows = b2cInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
+
+  const allInvRows = useMemo(() => {
+    const rows = filteredInvoices.map((inv) => mapInvoiceToGstr1Row(inv, partyByPid))
+    const invCmp = (a, b) =>
+      String(a.invNo ?? '').localeCompare(String(b.invNo ?? ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      })
+    const dateKey = (r) => String(r.date ?? '').slice(0, 10)
+    return [...rows].sort((a, b) => {
+      if (allInvSort === 'inv-date') {
+        const c = invCmp(a, b)
+        if (c !== 0) return c
+        return dateKey(a).localeCompare(dateKey(b))
+      }
+      // default: date-inv — date first, then invoice
+      const d = dateKey(a).localeCompare(dateKey(b))
+      if (d !== 0) return d
+      return invCmp(a, b)
+    })
+  }, [filteredInvoices, partyByPid, allInvSort])
+
+  const allInvTotals = useMemo(
+    () =>
+      allInvRows.reduce(
+        (s, r) => ({
+          value: s.value + (Number(r.value) || 0),
+          taxable: s.taxable + (Number(r.taxableValue) || 0),
+          igst: s.igst + (Number(r.igst) || 0),
+          cgst: s.cgst + (Number(r.cgst) || 0),
+          sgst: s.sgst + (Number(r.sgst) || 0),
+        }),
+        { value: 0, taxable: 0, igst: 0, cgst: 0, sgst: 0 }
+      ),
+    [allInvRows]
+  )
   const b2bHsnRows = aggregateHsnRows(b2bInvoices)
   const b2cHsnRows = aggregateHsnRows(b2cInvoices)
   const b2bHsnTotals = b2bHsnRows.reduce(
@@ -537,6 +583,20 @@ export default function Reports() {
     { skip: activeReportId !== 'ledger', refetchOnMountOrArgChange: true }
   )
   const ledgerRows = ledgerData?.entries ?? []
+
+  const ledgerRowsWithRunning = useMemo(() => {
+    let runDebit = 0
+    let runCredit = 0
+    return ledgerRows.map((row) => {
+      runDebit += Number(row.debit) || 0
+      runCredit += Number(row.credit) || 0
+      return {
+        ...row,
+        runningDebit: runDebit,
+        runningCredit: runCredit,
+      }
+    })
+  }, [ledgerRows])
   const ledgerSummary = ledgerData?.summary ?? null
 
   const { data: expRptData, isLoading: expRptLoading } = useGetExpenseReportQuery(
@@ -798,7 +858,7 @@ export default function Reports() {
   const handleExportExcel = () => {
     if (
       activeReportId === 'gst' &&
-      GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+      GST_SUBS_NEED_PARTY.includes(activeGstSub) &&
       (gstInvoicesLoading || customersForB2Loading)
     ) {
       alert('Party data is still loading. Please wait a moment and try again.')
@@ -817,6 +877,10 @@ export default function Reports() {
       b2cRows,
       b2bHsnRows,
       b2cHsnRows,
+      allInvFrom: gstr1From,
+      allInvTo: gstr1To,
+      allInvRows,
+      allInvSort,
       docSummaryFrom: gstr1From,
       docSummaryTo: gstr1To,
       documentIssuedSummary,
@@ -839,7 +903,8 @@ export default function Reports() {
       ledgerPayByPbid: ledgerPbidForApi,
       ledgerPayByName: selectedLedgerPayByApplied?.name,
       ledgerPayByDetail: selectedLedgerPayByApplied?.detail,
-      ledgerRows,
+      ledgerRows: ledgerRowsWithRunning,
+      showLedgerRunningTotals,
       ledgerSummary,
       expRptFrom,
       expRptTo,
@@ -876,12 +941,12 @@ export default function Reports() {
             onClick={handleExportExcel}
             disabled={
               activeReportId === 'gst' &&
-              GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+              GST_SUBS_NEED_PARTY.includes(activeGstSub) &&
               (gstInvoicesLoading || customersForB2Loading)
             }
             title={
               activeReportId === 'gst' &&
-              GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+              GST_SUBS_NEED_PARTY.includes(activeGstSub) &&
               (gstInvoicesLoading || customersForB2Loading)
                 ? 'Loading party data, please wait…'
                 : 'Download Excel (.xlsx)'
@@ -889,13 +954,15 @@ export default function Reports() {
           >
             <Download size={18} />
             {activeReportId === 'gst' &&
-            GST_SUBS_NEED_PARTY_FOR_B2.includes(activeGstSub) &&
+            GST_SUBS_NEED_PARTY.includes(activeGstSub) &&
             (gstInvoicesLoading || customersForB2Loading)
               ? 'Loading…'
               : 'Export'}
           </button>
           )}
-          {activeReportId === 'gst' && GST_SUBS_WITH_INVOICES.includes(activeGstSub) && (
+          {activeReportId === 'gst' &&
+            GST_SUBS_WITH_INVOICES.includes(activeGstSub) &&
+            activeGstSub !== 'all-inv' && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -1233,7 +1300,7 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2B – Registered outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                Party master: <code>gst_no</code> filled and <code>gst_reg</code> = 1. Count: {b2bRows.length}
+                Invoices with buyer <code>gstno</code> from sync (claimed GSTIN). Count: {b2bRows.length}
               </p>
               {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
               <div className="gst-rate-table-wrap">
@@ -1319,7 +1386,7 @@ export default function Reports() {
               </div>
               <h2 className="gst-rate-title">B2C – Unregistered / retail outward supplies</h2>
               <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
-                All others (no party match, empty <code>gst_no</code>, or <code>gst_reg</code> ≠ 1). Count:{' '}
+                Invoices without buyer <code>gstno</code> on the invoice. Count:{' '}
                 {b2cRows.length}
               </p>
               {gstB2SplitLoading && <p className="report-placeholder text-muted">Loading...</p>}
@@ -1358,6 +1425,127 @@ export default function Reports() {
                         <td>{getDisplayValue(row.placeOfSupply)}</td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeReportId === 'gst' && activeGstSub === 'all-inv' && (
+            <div className="gstr1-report">
+              <div className="gst-rate-toolbar">
+                <div className="gst-rate-dates">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={gstr1From}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1From(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={gstr1To}
+                      onChange={(e) => {
+                        setDateRange('custom')
+                        setGstr1To(e.target.value)
+                      }}
+                      className="form-input"
+                    />
+                  </label>
+                  <label>
+                    <span>Sort</span>
+                    <select
+                      value={allInvSort}
+                      onChange={(e) => setAllInvSort(e.target.value)}
+                      className="form-input"
+                      aria-label="Sort invoices"
+                    >
+                      <option value="date-inv">Date - Invoice</option>
+                      <option value="inv-date">Invoice - Date</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <h2 className="gst-rate-title">All Invoices</h2>
+              <p className="report-placeholder text-muted" style={{ marginBottom: '0.75rem' }}>
+                All invoices in selected date range. Sorted by{' '}
+                {allInvSort === 'inv-date' ? 'Invoice then Date' : 'Date then Invoice'}. Count:{' '}
+                {allInvRows.length}
+              </p>
+              {allInvLoading && <p className="report-placeholder text-muted">Loading...</p>}
+              <div className="gst-rate-table-wrap">
+                <table className="gst-rate-table">
+                  <thead>
+                    <tr>
+                      <th>Sno.</th>
+                      <th>GSTIN</th>
+                      <th>Party Name</th>
+                      <th>Invoice no.</th>
+                      <th>Date</th>
+                      <th className="text-right">Value</th>
+                      <th className="text-right">Tax Rate</th>
+                      <th className="text-right">Taxable Value</th>
+                      <th className="text-right">Integrated Tax</th>
+                      <th className="text-right">Central Tax</th>
+                      <th className="text-right">State Tax</th>
+                      <th>Place of Supply</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allInvRows.map((row, i) => (
+                      <tr key={`${row.invNo}-${row.date}-${i}`}>
+                        <td>{i + 1}</td>
+                        <td>{getGstinDisplay(row.gstin)}</td>
+                        <td>{getDisplayValue(row.partyName)}</td>
+                        <td>{getDisplayValue(row.invNo)}</td>
+                        <td>{getDisplayValue(row.date)}</td>
+                        <td className="text-right">{formatReportAmount(row.value)}</td>
+                        <td className="text-right">{`${Number(row.taxRate || 0).toFixed(2)}%`}</td>
+                        <td className="text-right">{formatReportAmount(row.taxableValue)}</td>
+                        <td className="text-right">{formatReportAmount(row.integratedTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.centralTaxDisplay)}</td>
+                        <td className="text-right">{formatReportAmount(row.stateTaxDisplay)}</td>
+                        <td>{getDisplayValue(row.placeOfSupply)}</td>
+                      </tr>
+                    ))}
+                    {allInvRows.length === 0 && !allInvLoading && (
+                      <tr>
+                        <td colSpan={12} className="text-center text-muted">
+                          No invoices found for selected date range.
+                        </td>
+                      </tr>
+                    )}
+                    {allInvRows.length > 0 && (
+                      <tr className="table-total-row">
+                        <td colSpan={5} className="font-medium">
+                          Total
+                        </td>
+                        <td className="text-right font-medium">
+                          {formatReportAmount(allInvTotals.value)}
+                        </td>
+                        <td />
+                        <td className="text-right font-medium">
+                          {formatReportAmount(allInvTotals.taxable)}
+                        </td>
+                        <td className="text-right font-medium">
+                          {formatReportAmount(allInvTotals.igst)}
+                        </td>
+                        <td className="text-right font-medium">
+                          {formatReportAmount(allInvTotals.cgst)}
+                        </td>
+                        <td className="text-right font-medium">
+                          {formatReportAmount(allInvTotals.sgst)}
+                        </td>
+                        <td />
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2219,6 +2407,14 @@ export default function Reports() {
 
               {ledgerRows.length > 0 && (
                 <div className="ledger-table-wrap">
+                  <label className="ledger-running-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showLedgerRunningTotals}
+                      onChange={(e) => setShowLedgerRunningTotals(e.target.checked)}
+                    />
+                    <span>Show Total Debit / Total Credit</span>
+                  </label>
                   <table className="ledger-table">
                     <thead>
                       <tr>
@@ -2227,12 +2423,18 @@ export default function Reports() {
                         <th>TYPE</th>
                         <th>REF NO.</th>
                         <th className="text-right">DEBIT (₹)</th>
+                        {showLedgerRunningTotals && (
+                          <th className="text-right">TOTAL DEBIT (₹)</th>
+                        )}
                         <th className="text-right">CREDIT (₹)</th>
+                        {showLedgerRunningTotals && (
+                          <th className="text-right">TOTAL CREDIT (₹)</th>
+                        )}
                         <th className="text-right">BALANCE (₹)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {ledgerRows.map((row, i) => {
+                      {ledgerRowsWithRunning.map((row, i) => {
                         const balance = Number(row.balance ?? 0)
                         return (
                           <tr key={`${row.ref_id}-${i}`}>
@@ -2259,9 +2461,19 @@ export default function Reports() {
                             <td className="text-right ledger-debit">
                               {Number(row.debit) > 0 ? formatReportAmount(row.debit) : '—'}
                             </td>
+                            {showLedgerRunningTotals && (
+                              <td className="text-right ledger-running-debit">
+                                {formatReportAmount(row.runningDebit)}
+                              </td>
+                            )}
                             <td className="text-right ledger-credit">
                               {Number(row.credit) > 0 ? formatReportAmount(row.credit) : '—'}
                             </td>
+                            {showLedgerRunningTotals && (
+                              <td className="text-right ledger-running-credit">
+                                {formatReportAmount(row.runningCredit)}
+                              </td>
+                            )}
                             <td className="text-right ledger-balance">
                               {formatReportAmount(balance)}
                             </td>
@@ -2273,7 +2485,13 @@ export default function Reports() {
                       <tr className="ledger-totals-row">
                         <td colSpan={4}><strong>Closing Balance</strong></td>
                         <td className="text-right"><strong className="ledger-debit">{formatReportAmount(ledgerSummary?.total_debit ?? 0)}</strong></td>
+                        {showLedgerRunningTotals && (
+                          <td className="text-right"><strong className="ledger-running-debit">{formatReportAmount(ledgerSummary?.total_debit ?? 0)}</strong></td>
+                        )}
                         <td className="text-right"><strong className="ledger-credit">{formatReportAmount(ledgerSummary?.total_credit ?? 0)}</strong></td>
+                        {showLedgerRunningTotals && (
+                          <td className="text-right"><strong className="ledger-running-credit">{formatReportAmount(ledgerSummary?.total_credit ?? 0)}</strong></td>
+                        )}
                         <td className="text-right"><strong>{formatReportAmount(ledgerSummary?.closing_balance ?? 0)}</strong></td>
                       </tr>
                     </tfoot>

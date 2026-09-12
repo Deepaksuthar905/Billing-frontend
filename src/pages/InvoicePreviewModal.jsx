@@ -12,12 +12,13 @@ const COMPANY = {
   phone: '8386011123',
   email: 'info@harshtechnology.com',
   gstin: '08DTGPS6229M2ZW',
-  state: '08-Rajasthan',
+  state: 'Rajasthan',
   logo: `${import.meta.env.BASE_URL}logo.png`,
   bankName: 'PUNJAB AND SIND BANK, CHOPASNI ROAD, JODHPUR',
   bankAccount: '02211100004426',
   ifsc: 'PSIB0000221',
   accountHolder: 'HARSH TECHNOLOGY',
+  upiId: 'harshtech@psbank',
   terms: 'Thanks for doing business with us!',
 }
 
@@ -46,6 +47,28 @@ function amountInWords(amt) {
   return numToWords(n) + ' Rupees only'
 }
 
+/** Hide sync amid tags like "[#5868]" from invoice item labels (name/description). */
+function stripAmidTag(text) {
+  return String(text ?? '')
+    .replace(/\s*\[#\d+\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Display invoice date as DD-MM-YYYY */
+function formatInvDate(value) {
+  if (value == null || value === '' || value === '—') return '—'
+  const s = String(value).trim()
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return s
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  return `${dd}-${mm}-${yyyy}`
+}
+
 /* ── Safe number ── */
 const n2 = (v) => Number(v || 0).toFixed(2)
 const fmt = (v) => `₹ ${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -63,11 +86,20 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
       : []
 
   const invNo       = inv.inv_no ?? inv.invoice_no ?? inv.id ?? '—'
-  const invDate     = inv.dt ?? inv.date ?? '—'
+  const invDate     = formatInvDate(inv.dt ?? inv.date)
   const customer    = inv.customer ?? inv.customer_name ?? inv.partyname ?? inv.billing_name ?? '—'
-  const custAddress = inv.billing_address ?? inv.customer_address ?? inv.address ?? ''
+  const custAddress = inv.billing_address ?? inv.customer_address ?? inv.address ?? inv.addr ?? ''
   const custPhone   = inv.customer_phone ?? inv.phone ?? inv.contact ?? ''
-  const custGstin   = inv.customer_gstin ?? inv.gstin ?? ''
+  const custGstin = String(
+    inv.customer_gstin ??
+      inv.buyer_gstin ??
+      inv.gst_no ??
+      inv.gstno ??
+      inv.gstin ??
+      inv.party?.gst_no ??
+      inv.party?.gstin ??
+      ''
+  ).trim()
   const pos         = inv.place_of_supply ?? inv.state ?? inv.state_of_supply ?? ''
   const cgst        = Number(inv.cgst || 0)
   const sgst        = Number(inv.sgst || 0)
@@ -163,8 +195,8 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
                 <div className="inv-party-name">{customer}</div>
                 {custAddress && <div className="inv-party-detail">{custAddress}</div>}
                 {custPhone   && <div className="inv-party-detail">Contact No: {custPhone}</div>}
-                {custGstin   && <div className="inv-party-detail">GSTIN: {custGstin}</div>}
                 {pos         && <div className="inv-party-detail">State: {pos}</div>}
+                {custGstin   && <div className="inv-party-detail">GSTIN: {custGstin}</div>}
               </div>
               <div className="inv-details-box">
                 <div className="inv-section-label">Invoice Details:</div>
@@ -194,18 +226,32 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
               <tbody>
                 {items.length > 0
                   ? items.map((item, idx) => {
-                      const itemAmt  = Number(item.amount ?? item.total ?? 0)
+                      const itemAmt  = Number(item.amount ?? item.total ?? item.payment ?? 0)
                       const itemTax  = Number(item.tax_amt ?? item.gst_amt ?? item.taxAmt ?? 0)
                       const itemQty  = Number(item.qty ?? item.quantity ?? 1)
                       const itemRate = Number(item.price ?? item.rate ?? item.unit_price ?? 0)
-                      const itemHsn  = item.hsn_code ?? item.hsn ?? item.hsnCode ?? '998319'
-                      const itemGstPct = Number(item.gst_pct ?? item.tax_pct ?? item.taxPct ?? 0)
+                      const itemHsn  = item.hsnocde ?? item.hsn_code ?? item.hsn ?? item.hsnCode ?? '998319'
+                      const itemGstPct = Number(item.gst_pct ?? item.tax_pct ?? item.taxPct ?? item.gst ?? 0)
+                      const nestedItem = item.item && typeof item.item === 'object' ? item.item : null
+                      const rawName =
+                        (typeof item.item === 'string' ? item.item : '') ||
+                        item.item_name ||
+                        item.name ||
+                        nestedItem?.item_name ||
+                        nestedItem?.name ||
+                        ''
+                      const rawDesc = item.description ?? ''
+                      const displayName = stripAmidTag(rawName) || stripAmidTag(rawDesc) || '—'
+                      const displayDesc = stripAmidTag(rawDesc)
+                      const showDesc =
+                        displayDesc &&
+                        displayDesc.toLowerCase() !== displayName.toLowerCase()
                       return (
                         <tr key={idx}>
                           <td className="text-center">{idx + 1}</td>
                           <td>
-                            <div className="inv-item-name">{item.item ?? item.item_name ?? item.name ?? ''}</div>
-                            {item.description && <div className="inv-item-desc">{item.description}</div>}
+                            <div className="inv-item-name">{displayName}</div>
+                            {showDesc && <div className="inv-item-desc">{displayDesc}</div>}
                             {item.item_code && <div className="inv-item-desc">({item.item_code})</div>}
                           </td>
                           <td className="text-center">{itemHsn || '—'}</td>
@@ -222,7 +268,7 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
                     /* Fallback: no line items from API, show single row summary */
                     <tr>
                       <td className="text-center">1</td>
-                      <td>{inv.item_name ?? inv.item ?? inv.description ?? '—'}</td>
+                      <td>{stripAmidTag(inv.item_name ?? inv.item ?? inv.description ?? '—') || '—'}</td>
                       <td className="text-center">{hsnCode || '—'}</td>
                       <td className="text-center">1</td>
                       <td className="text-right">{fmt(taxableAmt)}</td>
@@ -355,6 +401,7 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
                   <div>Account No. : {COMPANY.bankAccount}</div>
                   <div>IFSC Code : {COMPANY.ifsc}</div>
                   <div>Account holder's name : {COMPANY.accountHolder}</div>
+                  {COMPANY.upiId && <div>UPI ID : {COMPANY.upiId}</div>}
                 </div>
               </div>
               <div className="inv-signature">
