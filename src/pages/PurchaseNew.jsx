@@ -55,41 +55,49 @@ function nestedItemFromPo(po) {
   return null
 }
 
+const STANDARD_GST_RATES = [0, 3, 5, 12, 18, 28]
+
+/** Saved `with_without`: 0 = without tax, 1 / null (older rows) = with tax. */
+function priceTypeFromPo(po) {
+  return po?.with_without != null && Number(po.with_without) === 0
+    ? PRICE_TYPE_WITHOUT_TAX
+    : PRICE_TYPE_WITH_TAX
+}
+
 /**
  * Build first line from API purchase row.
- * Root `gst` is often **tax amount (₹)**; nested `item_id.gst` is **GST %**.
+ * Root `gst` is the **tax amount (₹)**; nested `item_id.gst` is the catalog **GST %**.
  */
-function lineFromPurchasePo(po) {
+function lineFromPurchasePo(po, priceType) {
   const payment = round2(Number(po.payment ?? po.amount) || 0)
   const inv = nestedItemFromPo(po)
-  const nestedGst = inv != null ? Number(inv.gst) : NaN
-  const rootGst = Number(po.gst)
-  const taxPct =
-    inv != null && Number.isFinite(nestedGst) && nestedGst >= 0 && nestedGst <= 100
-      ? nestedGst
-      : Number.isFinite(rootGst) && rootGst >= 0 && rootGst <= 100
-        ? rootGst
-        : 0
+  const taxAmtSaved = round2(
+    Number(po.gst) || (Number(po.cgst) || 0) + (Number(po.sgst) || 0) + (Number(po.igst) || 0),
+  )
+  const taxableSaved = round2(Number(po.taxable_amt) || Math.max(0, payment - taxAmtSaved))
+
+  let taxPct
+  if (taxableSaved > 0) {
+    const derived = (taxAmtSaved / taxableSaved) * 100
+    const standard = STANDARD_GST_RATES.find((r) => Math.abs(r - derived) <= 0.5)
+    taxPct = standard ?? round2(derived)
+  } else {
+    const nestedGst = inv != null ? Number(inv.gst) : NaN
+    taxPct = Number.isFinite(nestedGst) && nestedGst >= 0 && nestedGst <= 100 ? nestedGst : 0
+  }
 
   let itemId = ''
   let item = String(po.items ?? '').trim()
   let hsnCode = ''
   let description = ''
   const qty = 1
-  let price = payment
+  const price = priceType === PRICE_TYPE_WITHOUT_TAX ? taxableSaved : payment
 
   if (inv != null) {
     itemId = inv.item_id != null ? String(inv.item_id) : ''
     item = String(inv.item_name ?? inv.item ?? item ?? '').trim()
     hsnCode = String(inv.hsncode ?? inv.hsnCode ?? '').trim()
     description = inv.description != null ? String(inv.description).trim() : ''
-    const rate = Number(inv.rate)
-    if (!Number.isNaN(rate) && rate > 0) {
-      const lineGross = round2(rate * qty)
-      const diff = Math.abs(lineGross - payment)
-      /** Use catalog rate when it matches bill total; else use bill amount as inclusive line gross */
-      price = diff <= 2 ? rate : payment
-    }
   } else if (po.item_id != null && po.item_id !== '' && typeof po.item_id !== 'object') {
     itemId = String(po.item_id)
   }
@@ -218,9 +226,10 @@ export default function PurchaseNew() {
     setPayby(po.payby !== undefined && po.payby !== null ? String(po.payby) : '')
     setRoundOff(false)
     setRoundOffValue(0)
-    setPriceType(PRICE_TYPE_WITH_TAX)
-    const line = lineFromPurchasePo(po)
-    setLineItems([recalcLineAmount(line, PRICE_TYPE_WITH_TAX)])
+    const savedPriceType = priceTypeFromPo(po)
+    setPriceType(savedPriceType)
+    const line = lineFromPurchasePo(po, savedPriceType)
+    setLineItems([recalcLineAmount(line, savedPriceType)])
   }, [purchaseFromNav, purchaseFetched])
 
   /** List payload often has `vendor` name but no `prhid` — match party after vendors load. */
@@ -455,6 +464,7 @@ export default function PurchaseNew() {
       prhid: Number(prhid) || 0,
       gst: gstTotal,
       taxable_amt: taxableAmt,
+      with_without: priceType === PRICE_TYPE_WITH_TAX ? 1 : 0,
       cgst: cgstAmt,
       sgst: sgstAmt,
       igst: igstAmt,

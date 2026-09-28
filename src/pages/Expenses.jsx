@@ -68,16 +68,32 @@ function compareExpenses(a, b, sortBy) {
   return -diff
 }
 
+const FILTERS_STORAGE_KEY = 'expenses.filters'
+
+function loadSavedFilters() {
+  try {
+    const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export default function Expenses() {
+  const [saved] = useState(loadSavedFilters)
   const [selectedHeadId, setSelectedHeadId] = useState(null)
   const [search, setSearch] = useState('')
   const [rightSearch, setRightSearch] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
 
-  const [datePreset, setDatePreset] = useState('last-month')
-  const [from, setFrom] = useState(() => dateRangePresetToFromTo('last-month').from)
-  const [to, setTo] = useState(() => dateRangePresetToFromTo('last-month').to)
-  const [sortBy, setSortBy] = useState('date-desc')
+  const [datePreset, setDatePreset] = useState(saved?.datePreset ?? 'last-month')
+  const [from, setFrom] = useState(() => saved?.from ?? dateRangePresetToFromTo('last-month').from)
+  const [to, setTo] = useState(() => saved?.to ?? dateRangePresetToFromTo('last-month').to)
+  const [sortBy, setSortBy] = useState(saved?.sortBy ?? 'date-desc')
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ datePreset, from, to, sortBy }))
+  }, [datePreset, from, to, sortBy])
   /** Show cumulative Total column after Amount (ledger-style) */
   const [showRunningTotal, setShowRunningTotal] = useState(false)
 
