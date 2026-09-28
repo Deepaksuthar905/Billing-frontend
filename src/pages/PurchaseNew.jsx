@@ -19,6 +19,13 @@ const PRICE_TYPE_WITH_TAX = 'with_tax'
 const PRICE_TYPE_WITHOUT_TAX = 'without_tax'
 const round2 = (n) => Math.round(Number(n) * 100) / 100
 
+/** Allow tax 0%; only fall back when empty / invalid. */
+function resolveTaxPct(value, fallback = 18) {
+  if (value === '' || value == null) return fallback
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
 const emptyLineItem = () => ({
   itemId: '',
   item: '',
@@ -29,7 +36,7 @@ const emptyLineItem = () => ({
   price: 0,
   discountPct: 0,
   discountAmt: 0,
-  taxPct: 18,
+  taxPct: 0,
   taxAmt: 0,
   amount: 0,
 })
@@ -58,11 +65,11 @@ function lineFromPurchasePo(po) {
   const nestedGst = inv != null ? Number(inv.gst) : NaN
   const rootGst = Number(po.gst)
   const taxPct =
-    inv != null && !Number.isNaN(nestedGst) && nestedGst > 0 && nestedGst <= 100
+    inv != null && Number.isFinite(nestedGst) && nestedGst >= 0 && nestedGst <= 100
       ? nestedGst
-      : rootGst > 0 && rootGst <= 100
+      : Number.isFinite(rootGst) && rootGst >= 0 && rootGst <= 100
         ? rootGst
-        : 18
+        : 0
 
   let itemId = ''
   let item = String(po.items ?? '').trim()
@@ -146,7 +153,7 @@ export default function PurchaseNew() {
   const { data: customersData, refetch: refetchCustomers } = useGetCustomersQuery({ prtytyp: 1 }, { skip: false })
   const parties = customersData?.data ?? []
   const paybyAccounts = customersData?.payby ?? []
-  const { data: itemsData, refetch: refetchItems } = useGetItemsQuery(undefined, { skip: false })
+  const { data: itemsData, refetch: refetchItems } = useGetItemsQuery({ sales: 0 }, { skip: false })
   const items = itemsData?.data ?? []
   const [createPurchaseOrder, { isLoading: isSaving }] = useCreatePurchaseOrderMutation()
   const [updatePurchaseOrder, { isLoading: isUpdating }] = useUpdatePurchaseOrderMutation()
@@ -181,7 +188,7 @@ export default function PurchaseNew() {
   const recalcLineAmount = (line, type) => {
     const qty = Number(line.qty) || 0
     const price = Number(line.price) || 0
-    const taxPct = Number(line.taxPct) || 18
+    const taxPct = resolveTaxPct(line.taxPct, 0)
     const isWithTax = type === PRICE_TYPE_WITH_TAX
     if (isWithTax) {
       const amount = round2(qty * price)
@@ -192,7 +199,7 @@ export default function PurchaseNew() {
     const subtotal = round2(qty * price)
     const discountAmt = round2((subtotal * discountPct) / 100)
     const afterDiscount = Math.max(0, round2(subtotal - discountAmt))
-    const taxAmt = round2((afterDiscount * taxPct) / 100)
+    const taxAmt = taxPct > 0 ? round2((afterDiscount * taxPct) / 100) : 0
     return { ...line, discountAmt, taxAmt, amount: round2(Math.max(0, afterDiscount + taxAmt)) }
   }
 
@@ -276,7 +283,7 @@ export default function PurchaseNew() {
     if (!invItem) return
     const qty = Number(lineItems[index]?.qty) || 1
     const price = Number(invItem.rate) || 0
-    const taxPct = Number(invItem.gst) || 18
+    const taxPct = resolveTaxPct(invItem.gst, 0)
     setLineItems((prev) =>
       prev.map((line, i) => {
         if (i !== index) return line
@@ -391,6 +398,7 @@ export default function PurchaseNew() {
       with_without: 1,
       gst: Number(newItemForm.gst) || 0,
       gst_amt: 0,
+      sales: 0,
     }
     try {
       const res = await createItem(payload).unwrap()
@@ -408,7 +416,7 @@ export default function PurchaseNew() {
               hsnCode: payload.hsncode,
               description: payload.description ?? '',
               price: payload.rate,
-              taxPct: payload.gst || 18,
+              taxPct: resolveTaxPct(payload.gst, 0),
             }
             return recalcLineAmount(newLine, priceType)
           })

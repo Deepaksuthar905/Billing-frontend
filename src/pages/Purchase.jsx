@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Filter, Package, Users, Trash2, Edit } from 'lucide-react'
-import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useCreatePurchaseOrderMutation, useDeletePurchaseOrderMutation } from '../store/api'
+import { Plus, Search, Package, Users, Trash2, Edit, Calendar } from 'lucide-react'
+import { useGetPurchaseOrdersQuery, useGetCustomersQuery, useDeletePurchaseOrderMutation } from '../store/api'
 import { formatCurrency, formatDate } from '../utils/format'
 import './Purchase.css'
 
@@ -18,15 +18,58 @@ const fallbackVendors = [
   { id: 'v3', name: 'Supplier C', contact: '9876543212', balance: 0, lastOrder: '2025-03-13' },
 ]
 
+function toYmdLocal(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function defaultLastMonthRange() {
+  const today = new Date()
+  const start = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const end = new Date(today.getFullYear(), today.getMonth(), 0)
+  return { from: toYmdLocal(start), to: toYmdLocal(end) }
+}
+
 export default function Purchase() {
   const [activeTab, setActiveTab] = useState('orders')
   const [search, setSearch] = useState('')
   const [deleteTargetId, setDeleteTargetId] = useState(null)
+  const defaultRange = defaultLastMonthRange()
+  const [draftFrom, setDraftFrom] = useState(defaultRange.from)
+  const [draftTo, setDraftTo] = useState(defaultRange.to)
+  const [filterFrom, setFilterFrom] = useState(defaultRange.from)
+  const [filterTo, setFilterTo] = useState(defaultRange.to)
 
   const [deletePurchaseOrder, { isLoading: isDeleting }] = useDeletePurchaseOrderMutation()
 
+  const applyDateFilter = () => {
+    if (draftFrom && draftTo && draftFrom > draftTo) {
+      alert('From date cannot be after To date.')
+      return
+    }
+    if ((draftFrom && !draftTo) || (!draftFrom && draftTo)) {
+      alert('Please select both From and To dates, or clear both.')
+      return
+    }
+    setFilterFrom(draftFrom)
+    setFilterTo(draftTo)
+  }
+
+  const clearDateFilter = () => {
+    setDraftFrom('')
+    setDraftTo('')
+    setFilterFrom('')
+    setFilterTo('')
+  }
+
   const { data: poData, isLoading: poLoading, isError: poError } = useGetPurchaseOrdersQuery(
-    search || undefined,
+    {
+      search: search || undefined,
+      from: filterFrom || undefined,
+      to: filterTo || undefined,
+    },
     { refetchOnMountOrArgChange: 120 }
   )
   const { data: customersData, isLoading: customersLoading, isError: customersError } = useGetCustomersQuery(
@@ -37,6 +80,7 @@ export default function Purchase() {
     const amountOrTotal = po.amount ?? po.total
     return {
       ...po,
+      amountNum: Number(amountOrTotal) || 0,
       totalFormatted:
         typeof amountOrTotal === 'number'
           ? formatCurrency(amountOrTotal, 2)
@@ -49,6 +93,11 @@ export default function Purchase() {
       statusClass: (po.status || '').toLowerCase() === 'completed' || (po.status || '').toLowerCase() === 'received' ? 'paid' : (po.status || '').toLowerCase() === 'pending' ? 'pending' : 'overdue',
     }
   })
+
+  const filteredTotal = useMemo(
+    () => purchaseOrders.reduce((s, po) => s + (Number(po.amountNum) || 0), 0),
+    [purchaseOrders]
+  )
 
   const vendors = (customersError || !customersData?.data ? fallbackVendors : customersData.data).map((c) => ({
     id: c.pid ?? c.id,
@@ -102,17 +151,54 @@ export default function Purchase() {
                 className="search-input"
               />
             </div>
-            <button type="button" className="btn btn-secondary btn-sm">
-              <Filter size={16} />
-              Filter
-            </button>
+            <div className="purchase-date-filter">
+              <Calendar size={16} className="purchase-date-filter-icon" aria-hidden />
+              <input
+                type="date"
+                value={draftFrom}
+                onChange={(e) => setDraftFrom(e.target.value)}
+                className="input-sm"
+                title="From date"
+                aria-label="From date"
+              />
+              <span className="purchase-date-sep">—</span>
+              <input
+                type="date"
+                value={draftTo}
+                onChange={(e) => setDraftTo(e.target.value)}
+                className="input-sm"
+                title="To date"
+                aria-label="To date"
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={applyDateFilter}
+                title="Apply date filter"
+              >
+                Apply
+              </button>
+              {(draftFrom || draftTo || filterFrom || filterTo) && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={clearDateFilter}
+                  title="Clear dates"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="purchase-filter-total" title="Sum of purchase totals in current filter">
+              <span className="purchase-filter-total-label">Total</span>
+              <span className="purchase-filter-total-value">{formatCurrency(filteredTotal, 2)}</span>
+            </div>
           </div>
           {poLoading && !poData && <div className="page-loading">Loading...</div>}
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  {/* <th>PO</th> */}
                   <th>S No.</th>
                   <th>Invoice</th>
                   <th>Date</th>
@@ -124,9 +210,15 @@ export default function Purchase() {
                 </tr>
               </thead>
               <tbody>
+                {purchaseOrders.length === 0 && !poLoading && (
+                  <tr>
+                    <td colSpan={8} className="text-center text-muted">
+                      No purchase orders found for selected filter.
+                    </td>
+                  </tr>
+                )}
                 {purchaseOrders.map((po, index) => (
                   <tr key={po.prid ?? po.id ?? index}>
-                    {/* <td className="font-medium">{po.id}</td> */}
                     <td className="font-medium">{index + 1}</td>
                     <td>{po.p_inv_no ?? '—'}</td>
                     <td>{po.dateFormatted}</td>
@@ -154,7 +246,7 @@ export default function Purchase() {
                           aria-label="Delete"
                           onClick={() => setDeleteTargetId(po.prid ?? po.id)}
                         >
-                          <Trash2 size={15} color='red' />
+                          <Trash2 size={15} color="red" />
                         </button>
                       </div>
                     </td>
@@ -171,13 +263,13 @@ export default function Purchase() {
           <div className="filters-row">
             <div className="search-box">
               <Search size={18} className="search-icon" />
-            <input
-              type="search"
-              placeholder="Search by name, contact..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="search-input"
-            />
+              <input
+                type="search"
+                placeholder="Search by name, contact..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="search-input"
+              />
             </div>
             <button type="button" className="btn btn-primary btn-sm">
               <Plus size={16} />
@@ -189,20 +281,20 @@ export default function Purchase() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Vendor Name</th>
+                  <th>Name</th>
                   <th>Contact</th>
-                  <th>Outstanding</th>
+                  <th>Balance</th>
                   <th>Last Order</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {vendors.map((v) => (
-                  <tr key={v.id || v.name}>
+                  <tr key={v.id}>
                     <td className="font-medium">{v.name}</td>
                     <td>{v.contact}</td>
                     <td>{v.balanceFormatted ?? formatCurrency(v.balance)}</td>
-                    <td>{v.lastOrderFormatted ?? v.lastOrder}</td>
+                    <td>{v.lastOrderFormatted}</td>
                     <td>
                       <button type="button" className="btn-icon">→</button>
                     </td>

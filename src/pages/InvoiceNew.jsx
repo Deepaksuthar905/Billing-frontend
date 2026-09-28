@@ -140,7 +140,7 @@ export default function InvoiceNew() {
 
   const { data: customersData } = useGetCustomersQuery(undefined, { skip: false })
   const customers = customersData?.data ?? []
-  const { data: itemsData } = useGetItemsQuery(undefined, { skip: false })
+  const { data: itemsData } = useGetItemsQuery({ sales: 1 }, { skip: false })
   const items = itemsData?.data ?? []
   const [createInvoice, { isLoading: isCreating }] = useCreateInvoiceMutation()
   const [updateInvoice, { isLoading: isUpdating }] = useUpdateInvoiceMutation()

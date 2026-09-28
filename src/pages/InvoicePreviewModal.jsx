@@ -228,10 +228,31 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
                   ? items.map((item, idx) => {
                       const itemAmt  = Number(item.amount ?? item.total ?? item.payment ?? 0)
                       const itemTax  = Number(item.tax_amt ?? item.gst_amt ?? item.taxAmt ?? 0)
-                      const itemQty  = Number(item.qty ?? item.quantity ?? 1)
-                      const itemRate = Number(item.price ?? item.rate ?? item.unit_price ?? 0)
-                      const itemHsn  = item.hsnocde ?? item.hsn_code ?? item.hsn ?? item.hsnCode ?? '998319'
+                      const itemQty  = Math.max(Number(item.qty ?? item.quantity ?? 1) || 1, 1)
                       const itemGstPct = Number(item.gst_pct ?? item.tax_pct ?? item.taxPct ?? item.gst ?? 0)
+                      const gstInclusive = Number(item.with_without ?? 0) === 1
+                      const rawRate = Number(item.price ?? item.rate ?? item.unit_price ?? 0)
+                      // Price/Unit = taxable (ex-GST) unit price — not GST-inclusive total
+                      let taxableLine = Number(item.taxable_amt ?? item.taxable ?? 0)
+                      if (!(taxableLine > 0)) {
+                        if (itemTax > 0 && itemAmt >= itemTax) {
+                          taxableLine = itemAmt - itemTax
+                        } else if (gstInclusive && itemGstPct > 0 && itemAmt > 0) {
+                          taxableLine = (itemAmt * 100) / (100 + itemGstPct)
+                        } else if (rawRate > 0) {
+                          taxableLine = rawRate * itemQty
+                        } else {
+                          taxableLine = itemAmt
+                        }
+                      }
+                      const itemRate = taxableLine / itemQty
+                      const displayTax =
+                        itemTax > 0
+                          ? itemTax
+                          : itemGstPct > 0 && itemAmt > taxableLine
+                            ? itemAmt - taxableLine
+                            : 0
+                      const itemHsn  = item.hsnocde ?? item.hsn_code ?? item.hsn ?? item.hsnCode ?? '998319'
                       const nestedItem = item.item && typeof item.item === 'object' ? item.item : null
                       const rawName =
                         (typeof item.item === 'string' ? item.item : '') ||
@@ -258,7 +279,7 @@ export default function InvoicePreviewModal({ invId, onClose, onRecordPayment })
                           <td className="text-center">{itemQty}</td>
                           <td className="text-right">₹ {n2(itemRate)}</td>
                           <td className="text-right">
-                            ₹ {n2(itemTax)}{itemGstPct ? ` (${itemGstPct}%)` : ''}
+                            ₹ {n2(displayTax)}{itemGstPct ? ` (${itemGstPct}%)` : ''}
                           </td>
                           <td className="text-right">₹ {n2(itemAmt)}</td>
                         </tr>

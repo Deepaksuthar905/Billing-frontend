@@ -231,11 +231,14 @@ export const billingApi = createApi({
 
     // Items / Inventory
     getItems: builder.query({
-      query: ({ search, status } = {}) => {
+      query: (arg = {}) => {
+        const { search, status, sales } = typeof arg === 'object' && arg != null ? arg : {}
         const params = new URLSearchParams()
         if (search) params.set('search', search)
         if (status) params.set('status', status)
-        return { url: `/items?${params}` }
+        if (sales !== undefined && sales !== null && sales !== '') params.set('sales', String(sales))
+        const qs = params.toString()
+        return { url: qs ? `/items?${qs}` : '/items' }
       },
       transformResponse: (r) => {
         if (Array.isArray(r)) return { data: r.map((i) => ({ ...i, id: i.item_id ?? i.id })), summary: null }
